@@ -122,7 +122,9 @@ try {
 
     case '':
     case 'ping':
-        out(['ok' => true, 'app' => setting('app_name', APP_NAME), 'time' => date('c')]);
+        $dbok = false; $shops = null;
+        try { $shops = (int)val("SELECT COUNT(*) FROM shops"); $dbok = true; } catch (Throwable $e) { error_log('[PING] ' . $e->getMessage()); }
+        out(['ok' => true, 'app' => APP_NAME, 'db' => $dbok, 'shops' => $shops, 'time' => date('c')]);
 
     // ---------- Auth ----------
     case 'auth/send-otp':
