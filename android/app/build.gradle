@@ -1,0 +1,75 @@
+plugins {
+    id 'com.android.application'
+}
+
+def apiBase = project.findProperty('apiBase') ?: 'https://electrical-hub-production.up.railway.app/api/'
+def webSrc = file("${rootDir}/../backend/app")
+def webOut = layout.buildDirectory.dir("webassets")
+
+android {
+    namespace 'com.electricalhub.app'
+    compileSdk 34
+
+    defaultConfig {
+        applicationId "in.electricalhub.app"
+        minSdk 24
+        targetSdk 34
+        versionCode 1
+        versionName "1.0"
+        buildConfigField "String", "API_BASE", "\"${apiBase}\""
+    }
+
+    signingConfigs {
+        // Testing key committed in android/keystore. For Play Store, set EH_KEYSTORE + passwords (env / CI secrets).
+        release {
+            def ks = System.getenv('EH_KEYSTORE')
+            if (ks && file(ks).exists()) {
+                storeFile file(ks)
+                storePassword System.getenv('EH_KEYSTORE_PASSWORD')
+                keyAlias System.getenv('EH_KEY_ALIAS')
+                keyPassword System.getenv('EH_KEY_PASSWORD')
+            } else {
+                storeFile file("${rootDir}/keystore/dev.keystore")
+                storePassword 'ehub-dev-2026'
+                keyAlias 'electricalhub'
+                keyPassword 'ehub-dev-2026'
+            }
+        }
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            signingConfig signingConfigs.release
+        }
+    }
+
+    buildFeatures {
+        buildConfig true
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+
+    sourceSets {
+        main {
+            assets.srcDirs += [webOut.get().asFile]
+        }
+    }
+}
+
+// Copy the shared web UI (backend/app) into the APK as assets/www
+tasks.register('copyWebApp', Copy) {
+    from webSrc
+    into webOut.map { it.dir('www') }
+}
+preBuild.dependsOn copyWebApp
+
+dependencies {
+    implementation 'androidx.appcompat:appcompat:1.7.0'
+    implementation 'androidx.webkit:webkit:1.11.0'
+    implementation 'androidx.core:core:1.13.1'
+    implementation 'androidx.swiperefreshlayout:swiperefreshlayout:1.1.0'
+}

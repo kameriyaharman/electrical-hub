@@ -1,0 +1,13 @@
+Options -Indexes
+DirectoryIndex index.php
+<IfModule mod_rewrite.c>
+RewriteEngine On
+RewriteRule ^(lib|install)/ - [F,L]
+RewriteRule ^config\.php$ - [F,L]
+RewriteCond %{HTTP:Authorization} .
+RewriteRule .* - [E=HTTP_AUTHORIZATION:%{HTTP:Authorization}]
+</IfModule>
+<IfModule mod_php.c>
+php_value upload_max_filesize 12M
+php_value post_max_size 14M
+</IfModule>
