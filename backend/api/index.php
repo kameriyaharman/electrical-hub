@@ -131,7 +131,9 @@ try {
         $mobile = preg_replace('/\D/', '', (string)in('mobile'));
         $mobile = substr($mobile, -10);
         if (strlen($mobile) !== 10) fail('Enter a valid 10-digit mobile number');
-        $code = (string)random_int(1000, 9999);
+        // Test mode: fixed OTP (default 1234) until an SMS gateway (MSG91) is switched on in Settings
+        $live = setting('otp_mode') === 'msg91' && setting('msg91_authkey');
+        $code = $live ? (string)random_int(1000, 9999) : (setting('test_otp', '1234') ?: '1234');
         q("INSERT INTO otps (mobile, code, expires_at, attempts) VALUES (?, ?, DATE_ADD(NOW(), INTERVAL 10 MINUTE), 0)
            ON DUPLICATE KEY UPDATE code = VALUES(code), expires_at = VALUES(expires_at), attempts = 0", [$mobile, $code]);
         $sent = send_otp_sms($mobile, $code);
