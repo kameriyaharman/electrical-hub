@@ -65,11 +65,10 @@ function shops_query($opts) {
             OR s.id IN (SELECT sp.shop_id FROM shop_products sp JOIN products pr ON pr.id = sp.product_id WHERE pr.name LIKE ?))";
         array_push($p, $like, $like, $like, $like, $like, $like);
     }
-    $planRank = "0";
     $sort = $opts['sort'] ?? 'nearest';
     if ($sort === 'rating') $order = "s.rating DESC";
-    elseif ($dist !== 'NULL') $order = "$planRank, distance";
-    else $order = "$planRank, s.rating DESC";
+    elseif ($dist !== 'NULL') $order = "distance";
+    else $order = "s.rating DESC, s.id DESC";
     if ($sort === 'nearest' && $dist !== 'NULL' && empty($opts['plan_first'])) $order = "distance";
     $limit = min(100, (int)($opts['limit'] ?? 50));
     $offset = max(0, (int)($opts['offset'] ?? 0));
