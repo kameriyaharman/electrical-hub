@@ -34,9 +34,14 @@ function track(h) {
   else st.push(h);
   saveNav();
 }
+// Change the URL without relying on the 'hashchange' event (unreliable in some Android WebViews),
+// then render the screen directly.
 function setHash(h, replace) {
-  if (curHash() === h) { route(); return; }
-  if (replace) location.replace(h); else location.hash = h;
+  if (curHash() !== h) {
+    try { if (replace) history.replaceState(null, '', h); else history.pushState(null, '', h); }
+    catch (e) { if (replace) location.replace(h); else location.hash = h; return; }
+  }
+  track(curHash()); route();
 }
 /** go(h) opens a new screen; go(h, true) swaps the current screen (redirects, filter changes). */
 function go(h, replace) { NAV.mode = replace ? 'replace' : null; setHash(h, replace); }
@@ -174,6 +179,8 @@ function bindCards(list) {
   list.forEach(s => CARD_CACHE[s.id] = s);
 }
 document.addEventListener('click', e => {
+  const a = e.target.closest('a[href^="#/"]');
+  if (a && !e.target.closest('[data-call],[data-wa],[data-li]')) { e.preventDefault(); go(a.getAttribute('href')); return; }
   const t = e.target.closest('[data-call],[data-wa],[data-shop],[data-act],[data-href]');
   if (!t) return;
   if (t.dataset.call) { e.stopPropagation(); callShop(CARD_CACHE[t.dataset.call]); return; }
@@ -793,6 +800,7 @@ function parse() {
   return { parts: path.split('/').filter(Boolean), params };
 }
 function route() {
+  LAST_ROUTED = curHash();
   closeSheet();
   const { parts, params } = parse();
   const [a, b] = parts;
@@ -824,11 +832,15 @@ function route() {
     }
   } catch (e) { console.error(e); toast(e.message); }
 }
-window.addEventListener('hashchange', () => { track(curHash()); route(); });
+// Fallbacks: manual hash edits / browser back still work
+let LAST_ROUTED = null;
+window.addEventListener('hashchange', () => { if (curHash() !== LAST_ROUTED) { track(curHash()); route(); } });
+window.addEventListener('popstate', () => { if (curHash() !== LAST_ROUTED) { track(curHash()); route(); } });
+window.addEventListener('error', e => { try { toast('Error: ' + (e.message || 'script error')); } catch (x) {} });
 window.addEventListener('unhandledrejection', e => { toast((e.reason && e.reason.message) || 'Something went wrong'); });
 // Android back button support: native calls EH.back(); returns true if handled
 window.EH = { back: navBack };
 
-if (!location.hash) { NAV.stack = []; location.replace(S.token ? (S.role === 'owner' ? '#/owner' : '#/home') : '#/login'); }
+if (!location.hash) { NAV.stack = []; go(S.token ? (S.role === 'owner' ? '#/owner' : '#/home') : '#/login', true); }
 else { if (!NAV.stack.length || NAV.stack[NAV.stack.length - 1] !== curHash()) track(curHash()); route(); }
 })();
