@@ -28,7 +28,7 @@ $rows = all("SELECT u.*, c.name city,
   (SELECT COUNT(*) FROM leads l WHERE l.user_id = u.id AND l.type IN ('call','whatsapp')) contacts
   FROM users u LEFT JOIN cities c ON c.id = u.city_id WHERE $w ORDER BY u.id DESC LIMIT $per OFFSET " . (($page - 1) * $per), $p);
 
-page_header('Customers', 'customers', 'App users — customers and shop owners', '<a class="btn" href="#" data-open="nAll">Send notification to all</a><a class="btn" href="export.php?t=users">Export CSV</a>');
+page_header('Customers', 'customers', 'App users — customers and shop owners', '<a class="btn" href="notifications.php">Send notification</a><a class="btn" href="export.php?t=users">Export CSV</a>');
 ?>
 <form class="filters"><input type="text" name="q" placeholder="Name or mobile…" value="<?= h($qq) ?>">
 <select name="role"><option value="">All users</option><option value="customer" <?= $role === 'customer' ? 'selected' : '' ?>>Customers</option><option value="owner" <?= $role === 'owner' ? 'selected' : '' ?>>Shop owners</option></select><button class="btn">Filter</button></form>

@@ -8,6 +8,6 @@ RewriteCond %{HTTP:Authorization} .
 RewriteRule .* - [E=HTTP_AUTHORIZATION:%{HTTP:Authorization}]
 </IfModule>
 <IfModule mod_php.c>
-php_value upload_max_filesize 12M
-php_value post_max_size 14M
+php_value upload_max_filesize 60M
+php_value post_max_size 64M
 </IfModule>

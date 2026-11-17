@@ -4,7 +4,7 @@ RUN docker-php-ext-install pdo_mysql \
  && a2dismod -f mpm_event mpm_worker >/dev/null 2>&1 || true \
  && a2enmod mpm_prefork rewrite headers \
  && sed -ri 's/AllowOverride None/AllowOverride All/g' /etc/apache2/apache2.conf \
- && { echo 'upload_max_filesize=12M'; echo 'post_max_size=14M'; echo 'memory_limit=256M'; echo 'expose_php=Off'; echo 'date.timezone=Asia/Kolkata'; echo 'display_errors=Off'; echo 'log_errors=On'; echo 'error_log=/dev/stderr'; } > /usr/local/etc/php/conf.d/electricalhub.ini \
+ && { echo 'upload_max_filesize=60M'; echo 'post_max_size=64M'; echo 'memory_limit=256M'; echo 'expose_php=Off'; echo 'date.timezone=Asia/Kolkata'; echo 'display_errors=Off'; echo 'log_errors=On'; echo 'error_log=/dev/stderr'; } > /usr/local/etc/php/conf.d/electricalhub.ini \
  && echo 'ServerName localhost' >> /etc/apache2/apache2.conf
 
 COPY . /var/www/html/

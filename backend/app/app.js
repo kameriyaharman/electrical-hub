@@ -129,6 +129,11 @@ function bottomNav(active) {
 const loading = () => '<div class="spin"></div>';
 function render(html) { $app.innerHTML = html; window.scrollTo(0, 0); }
 
+// Tell the Android app who/where the user is, so it can check for new notifications in the background
+function syncNative() {
+  try { if (NATIVE && NATIVE.setUser) NATIVE.setUser(JSON.stringify({ token: S.token || '', city_id: cityId(), role: S.role || 'customer' })); } catch (e) {}
+}
+
 // ---------- location ----------
 function getLocation(force) {
   return new Promise(resolve => {
@@ -178,17 +183,33 @@ let CARD_CACHE = {};
 function bindCards(list) {
   list.forEach(s => CARD_CACHE[s.id] = s);
 }
-document.addEventListener('click', e => {
-  const a = e.target.closest('a[href^="#/"]');
-  if (a && !e.target.closest('[data-call],[data-wa],[data-li]')) { e.preventDefault(); go(a.getAttribute('href')); return; }
-  const t = e.target.closest('[data-call],[data-wa],[data-shop],[data-act],[data-href]');
-  if (!t) return;
-  if (t.dataset.call) { e.stopPropagation(); callShop(CARD_CACHE[t.dataset.call]); return; }
-  if (t.dataset.wa) { e.stopPropagation(); waShop(CARD_CACHE[t.dataset.wa]); return; }
-  if (t.dataset.act === 'back') { back(); return; }
-  if (t.dataset.href) { go(t.dataset.href); return; }
-  if (t.dataset.shop) { go('#/shop/' + t.dataset.shop); return; }
-});
+// Taps: every tappable element gets its own click handler (bound automatically whenever the screen
+// changes). Some Android WebViews do not deliver taps to a page-level listener, so we don't rely on one.
+const NAV_SEL = '[data-call],[data-wa],[data-shop],[data-act="back"],[data-href],a[href^="#/"]';
+function onNavTap(e) {
+  const el = e.currentTarget;
+  if (el.dataset.call) { e.preventDefault(); e.stopPropagation(); callShop(CARD_CACHE[el.dataset.call]); return; }
+  if (el.dataset.wa) { e.preventDefault(); e.stopPropagation(); waShop(CARD_CACHE[el.dataset.wa]); return; }
+  if (el.dataset.act === 'back') { e.preventDefault(); e.stopPropagation(); back(); return; }
+  if (el.tagName === 'A' && (el.getAttribute('href') || '').indexOf('#/') === 0) { e.preventDefault(); e.stopPropagation(); go(el.getAttribute('href')); return; }
+  if (el.dataset.href) { e.preventDefault(); e.stopPropagation(); go(el.dataset.href); return; }
+  if (el.dataset.shop) { e.preventDefault(); e.stopPropagation(); go('#/shop/' + el.dataset.shop); }
+}
+function bindNav(root) {
+  (root || document).querySelectorAll(NAV_SEL).forEach(el => { if (el._nb) return; el._nb = 1; el.addEventListener('click', onNavTap); });
+}
+let BIND_PENDING = false;
+new MutationObserver(() => { if (BIND_PENDING) return; BIND_PENDING = true; Promise.resolve().then(() => { BIND_PENDING = false; bindNav(document.body); }); })
+  .observe(document.body, { childList: true, subtree: true });
+
+// Lightweight remote log (errors + screen changes) so problems on real phones show up in the server logs
+function rlog(type, msg) {
+  try {
+    const body = JSON.stringify({ type, msg: String(msg).slice(0, 300), hash: location.hash, app: NATIVE ? 'android' : 'web', v: '1.5' });
+    if (navigator.sendBeacon) navigator.sendBeacon(API + '?r=log', new Blob([body], { type: 'text/plain' }));
+    else fetch(API + '?r=log', { method: 'POST', body }).catch(() => {});
+  } catch (e) {}
+}
 
 // ---------- sheet ----------
 function sheet(html) { const s = document.getElementById('sheet'); s.querySelector('.sheet-box').innerHTML = html; s.classList.add('show'); return s.querySelector('.sheet-box'); }
@@ -211,7 +232,7 @@ async function pickCity() {
   box.querySelectorAll('[data-city]').forEach(el => el.onclick = () => { setCity(m.cities.find(c => c.id == el.dataset.city)); closeSheet(); route(); });
 }
 function setCity(c) {
-  S.city = { id: +c.id, name: c.name, state: c.state }; store.set('city', S.city);
+  S.city = { id: +c.id, name: c.name, state: c.state }; store.set('city', S.city); syncNative();
   if (S.token) api('me/update', { body: { city_id: c.id } }).catch(() => {});
 }
 
@@ -260,7 +281,7 @@ function screenLogin() {
     try {
       const r = await api('auth/verify-otp', { body: { mobile, code, role } });
       S.token = r.token; S.user = r.user; S.role = role;
-      store.set('token', r.token); store.set('user', r.user); store.set('role', role);
+      store.set('token', r.token); store.set('user', r.user); store.set('role', role); syncNative();
       if (!S.city) { const m = await meta(); const c = m.cities.find(x => x.id == r.user.city_id); if (c) setCity(c); }
       if (role === 'owner') { NAV.stack = ['#/home']; go('#/owner', true); } else go('#/home', true);
     } catch (e) { toast(e.message); }
@@ -270,7 +291,7 @@ function screenLogin() {
 function logout(silent) {
   if (!silent && S.token) api('auth/logout', { body: {} }).catch(() => {});
   S.token = ''; S.user = null; store.del('token'); store.del('user');
-  NAV.stack = []; go('#/login', true);
+  NAV.stack = []; syncNative(); go('#/login', true);
 }
 function needLogin(msg) {
   if (S.token) return false;
@@ -287,6 +308,7 @@ async function screenHome() {
     '<form class="srch" id="sf">' + icon('search') + '<input id="q" placeholder="Search shops, products, brands..." enterkeyhint="search"></form></div>' +
     '<div class="wrap" id="body">' + loading() + '</div></div>' + bottomNav('Home'));
   document.getElementById('city').onclick = pickCity;
+  if (S.token) api('me').then(m => { const c = m.counts.notifications; const bell = document.querySelector('.home-hd [data-href="#/notifications"]'); if (c && bell) { bell.style.position = 'relative'; bell.insertAdjacentHTML('beforeend', '<i style="position:absolute;top:-4px;right:-4px;background:var(--yellow);color:#000;font-style:normal;font-size:10px;font-weight:700;border-radius:9px;padding:0 5px">' + c + '</i>'); } }).catch(() => {});
   document.getElementById('sf').onsubmit = e => { e.preventDefault(); const q = document.getElementById('q').value.trim(); if (q) go('#/shops?q=' + encodeURIComponent(q)); };
   if (!S.city) { const m = await meta().catch(() => null); if (m && m.cities.length) { const def = m.cities.find(c => c.id == (S.user && S.user.city_id)) || m.cities[0]; setCity(def); document.getElementById('city').innerHTML = icon('pin') + esc(def.name + ', ' + def.state) + ' ▾'; } }
   const loc = await getLocation();
@@ -294,7 +316,9 @@ async function screenHome() {
     const d = await api('home', { params: { city_id: cityId(), lat: loc && loc.lat, lng: loc && loc.lng } });
     bindCards(d.nearby);
     const banners = d.banners.length ? d.banners : [{ title: 'All Electrical Products in One Place' }];
-    let h = '<div class="banners">' + banners.map((b, i) => '<div class="bnr" ' + (b.image ? 'style="background-image:url(\'' + esc(b.image) + '\')"' : '') + (b.shop_id ? ' data-shop="' + b.shop_id + '"' : '') + '>' +
+    let h = '<div class="banners">' + banners.map((b, i) => b.type === 'video' ?
+      '<div class="bnr vid"' + (b.shop_id ? ' data-shop="' + b.shop_id + '"' : '') + '><video src="' + esc(b.video) + '"' + (b.image ? ' poster="' + esc(b.image) + '"' : '') + ' muted playsinline preload="auto"></video></div>' :
+      '<div class="bnr" ' + (b.image ? 'style="background-image:url(\'' + esc(b.image) + '\')"' : '') + (b.shop_id ? ' data-shop="' + b.shop_id + '"' : '') + '>' +
       (b.image ? '' : '<b>' + (i === 0 ? esc(b.title).replace(/in One Place/i, '<em>in One Place</em>') : esc(b.title)) + '</b>' + (b.subtitle ? '<small>' + esc(b.subtitle) + '</small>' : '') + '<span class="art">' + (i % 2 ? '💡' : '🔌') + '</span>') + '</div>').join('') + '</div>' +
       (banners.length > 1 ? '<div class="dots">' + banners.map((b, i) => '<i class="' + (i ? '' : 'on') + '"></i>').join('') + '</div>' : '');
     h += '<div class="sec"><h3>Categories</h3></div><div class="cats">' + d.categories.map(c => '<div class="cat" data-href="#/shops?category_id=' + c.id + '&cname=' + encodeURIComponent(c.name) + '"><div class="em">' + (c.image ? '<img src="' + esc(c.image) + '">' : esc(c.icon || emojiFor(c.name))) + '</div>' + esc(c.name) + '</div>').join('') + '</div>';
@@ -310,11 +334,12 @@ async function screenHome() {
 
 // Home banner slider: auto-advances every 3 s, loops, pauses while the user is touching it
 let SLIDER = null;
-function stopSlider() { if (SLIDER) { clearInterval(SLIDER.t); SLIDER = null; } }
+function stopSlider() { if (SLIDER) { clearInterval(SLIDER.t); SLIDER = null; } document.querySelectorAll('.banners video').forEach(v => v.pause()); }
 function startSlider() {
   stopSlider();
   const el = document.querySelector('.banners');
-  if (!el || el.children.length < 2) return;
+  if (!el) return;
+  if (el.children.length < 2) { const v = el.querySelector('video'); if (v) { v.loop = true; const p = v.play(); if (p && p.catch) p.catch(() => {}); } return; }
   const dots = [...document.querySelectorAll('.dots i')];
   const n = el.children.length;
   const cur = () => Math.round(el.scrollLeft / (el.children[0].offsetWidth + 10));
@@ -323,11 +348,19 @@ function startSlider() {
   el.addEventListener('scroll', mark, { passive: true });
   el.addEventListener('touchstart', () => { st.hold = true; }, { passive: true });
   el.addEventListener('touchend', () => { setTimeout(() => { st.hold = false; }, 1500); }, { passive: true });
+  const vids = el.querySelectorAll('video');
+  const playVisible = () => { const i = cur(); vids.forEach(v => { if (el.children[i] && el.children[i].contains(v)) { const p = v.play(); if (p && p.catch) p.catch(() => {}); } else v.pause(); }); };
+  el.addEventListener('scroll', () => { clearTimeout(st.pv); st.pv = setTimeout(playVisible, 200); }, { passive: true });
+  setTimeout(playVisible, 300);
+  const advance = () => { const next = (cur() + 1) % n; el.scrollTo({ left: next * (el.children[0].offsetWidth + 10), behavior: 'smooth' }); };
+  vids.forEach(v => v.addEventListener('ended', () => { if (!st.hold && SLIDER === st) advance(); }));
   st.t = setInterval(() => {
     if (!document.body.contains(el)) return stopSlider();
     if (st.hold || document.hidden) return;
-    const next = (cur() + 1) % n;
-    el.scrollTo({ left: next * (el.children[0].offsetWidth + 10), behavior: 'smooth' });
+    const slide = el.children[cur()];
+    const v = slide && slide.querySelector('video');
+    if (v && !v.paused && !v.ended) return;   // let the video finish, then 'ended' moves on
+    advance();
   }, 3000);
 }
 
@@ -576,7 +609,9 @@ async function screenNotifications() {
   if (needLogin()) return;
   render('<div class="scr">' + hd('Notifications') + '<div class="wrap" id="nl">' + loading() + '</div></div>' + bottomNav('Account'));
   const d = await api('notifications').catch(() => ({ notifications: [] }));
-  document.getElementById('nl').innerHTML = d.notifications.length ? d.notifications.map(n => '<div class="card" style="margin-bottom:10px;' + (n.is_read ? '' : 'border-left:4px solid var(--yellow)') + '"><b>' + esc(n.title) + '</b><div>' + esc(n.body || '') + '</div><div class="muted">' + esc(n.date) + '</div></div>').join('') : '<div class="empty"><div class="big">🔔</div>No notifications</div>';
+  document.getElementById('nl').innerHTML = d.notifications.length ? d.notifications.map(n => '<div class="card" style="margin-bottom:10px;' + (n.is_read ? '' : 'border-left:4px solid var(--yellow)') + '"' + (n.shop_id ? ' data-shop="' + n.shop_id + '"' : '') + '>' +
+    (n.image ? '<img src="' + esc(n.image) + '" style="width:100%;border-radius:10px;margin-bottom:8px">' : '') + '<b>' + esc(n.title) + '</b><div>' + esc(n.body || '') + '</div><div class="muted">' + esc(n.date) + (n.shop_id ? ' · Tap to open shop ›' : '') + '</div></div>').join('') : '<div class="empty"><div class="big">🔔</div>No notifications</div>';
+  syncNative();
 }
 
 // ===================== SHOP OWNER =====================
@@ -826,6 +861,7 @@ function parse() {
 }
 function route() {
   LAST_ROUTED = curHash();
+  rlog('route', curHash());
   stopSlider();
   closeSheet();
   const { parts, params } = parse();
@@ -862,11 +898,12 @@ function route() {
 let LAST_ROUTED = null;
 window.addEventListener('hashchange', () => { if (curHash() !== LAST_ROUTED) { track(curHash()); route(); } });
 window.addEventListener('popstate', () => { if (curHash() !== LAST_ROUTED) { track(curHash()); route(); } });
-window.addEventListener('error', e => { try { toast('Error: ' + (e.message || 'script error')); } catch (x) {} });
-window.addEventListener('unhandledrejection', e => { toast((e.reason && e.reason.message) || 'Something went wrong'); });
+window.addEventListener('error', e => { try { rlog('error', (e.message || 'script error') + ' @' + (e.lineno || '')); toast('Error: ' + (e.message || 'script error')); } catch (x) {} });
+window.addEventListener('unhandledrejection', e => { const m = (e.reason && e.reason.message) || 'Something went wrong'; rlog('reject', m); toast(m); });
 // Android back button support: native calls EH.back(); returns true if handled
-window.EH = { back: navBack };
+window.EH = { back: navBack, open: h => go(h) };
 
+syncNative();
 if (!location.hash) { NAV.stack = []; go(S.token ? (S.role === 'owner' ? '#/owner' : '#/home') : '#/login', true); }
 else { if (!NAV.stack.length || NAV.stack[NAV.stack.length - 1] !== curHash()) track(curHash()); route(); }
 })();

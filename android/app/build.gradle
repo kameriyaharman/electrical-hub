@@ -14,8 +14,8 @@ android {
         applicationId "in.electricalhub.app"
         minSdk 24
         targetSdk 34
-        versionCode 1
-        versionName "1.0"
+        versionCode 6
+        versionName "1.5"
         buildConfigField "String", "API_BASE", "\"${apiBase}\""
     }
 
@@ -73,4 +73,5 @@ dependencies {
     implementation 'androidx.webkit:webkit:1.11.0'
     implementation 'androidx.core:core:1.13.1'
     implementation 'androidx.swiperefreshlayout:swiperefreshlayout:1.1.0'
+    implementation 'androidx.work:work-runtime:2.9.1'
 }

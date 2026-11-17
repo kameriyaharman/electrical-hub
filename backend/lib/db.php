@@ -17,13 +17,38 @@ function db() {
 
 function ensure_installed($pdo) {
     $exists = $pdo->query("SHOW TABLES LIKE 'admins'")->fetchColumn();
-    if ($exists) return;
+    if ($exists) { migrate($pdo); return; }
     $sql = file_get_contents(__DIR__ . '/../install/schema.sql');
     foreach (array_filter(array_map('trim', explode(';', $sql))) as $stmt) {
         if (stripos($stmt, 'CREATE') !== false || stripos($stmt, 'SET') === 0) $pdo->exec($stmt);
     }
     require __DIR__ . '/../install/seed.php';
     seed_database($pdo);
+    migrate($pdo);
+}
+
+/** Small additive migrations for databases created by older versions. Safe to run repeatedly. */
+function migrate($pdo) {
+    $want = [
+        'banners' => [
+            'media_type' => "VARCHAR(10) NOT NULL DEFAULT 'image'",
+            'video' => "VARCHAR(255) NULL",
+            'radius_km' => "DECIMAL(6,1) NULL",
+        ],
+        'notifications' => [
+            'city_id' => "INT NULL",
+            'audience' => "VARCHAR(20) NOT NULL DEFAULT 'all'",
+            'shop_id' => "INT NULL",
+            'image' => "VARCHAR(255) NULL",
+        ],
+        'users' => [
+            'notif_seen_id' => "INT NOT NULL DEFAULT 0",
+        ],
+    ];
+    foreach ($want as $table => $cols) {
+        $have = array_column($pdo->query("SHOW COLUMNS FROM `$table`")->fetchAll(PDO::FETCH_ASSOC), 'Field');
+        foreach ($cols as $c => $def) if (!in_array($c, $have, true)) $pdo->exec("ALTER TABLE `$table` ADD COLUMN `$c` $def");
+    }
 }
 
 /** Expire paid plans whose end date has passed (cheap; runs at most once per hour). */
@@ -105,12 +130,14 @@ function upload_url($path) {
 }
 
 /** Save an uploaded file ($_FILES entry). Returns relative path or throws. */
-function save_upload($file, $subdir, $allowed = ['jpg', 'jpeg', 'png', 'webp', 'pdf']) {
-    if (!$file || ($file['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK) throw new Exception('File upload failed');
-    if ($file['size'] > 10 * 1024 * 1024) throw new Exception('File too large (max 10 MB)');
+function save_upload($file, $subdir, $allowed = ['jpg', 'jpeg', 'png', 'webp', 'pdf'], $maxMb = 10) {
+    $err = $file['error'] ?? UPLOAD_ERR_NO_FILE;
+    if ($err === UPLOAD_ERR_INI_SIZE || $err === UPLOAD_ERR_FORM_SIZE) throw new Exception('File too large for the server (max ' . ini_get('upload_max_filesize') . ')');
+    if (!$file || $err !== UPLOAD_ERR_OK) throw new Exception('File upload failed');
+    if ($file['size'] > $maxMb * 1024 * 1024) throw new Exception("File too large (max $maxMb MB)");
     $ext = strtolower(pathinfo($file['name'], PATHINFO_EXTENSION));
     if ($ext === '') {
-        $map = ['image/jpeg' => 'jpg', 'image/png' => 'png', 'image/webp' => 'webp', 'application/pdf' => 'pdf'];
+        $map = ['image/jpeg' => 'jpg', 'image/png' => 'png', 'image/webp' => 'webp', 'application/pdf' => 'pdf', 'video/mp4' => 'mp4'];
         $ext = $map[mime_content_type($file['tmp_name'])] ?? '';
     }
     if (!in_array($ext, $allowed, true)) throw new Exception('File type not allowed');

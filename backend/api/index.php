@@ -91,6 +91,13 @@ function send_otp_sms($mobile, $code) {
     return $res !== false;
 }
 
+/** SQL condition (alias n) for notifications a user should see: personal + broadcasts for their city / role. */
+function notif_where($u) {
+    $uid = (int)$u['id']; $city = (int)$u['city_id'];
+    $role = $u['role'] === 'owner' ? 'owner' : 'customer';
+    return "(n.user_id = $uid OR (n.user_id IS NULL AND (n.city_id IS NULL OR n.city_id = $city) AND n.audience IN ('all','$role')))";
+}
+
 function my_shop($u) { return one("SELECT s.*, c.name AS city_name FROM shops s LEFT JOIN cities c ON c.id = s.city_id WHERE s.owner_user_id = ? ORDER BY s.id LIMIT 1", [$u['id']]); }
 
 function shop_full($s, $u = null) {
@@ -177,7 +184,7 @@ try {
                 'saved' => (int)val("SELECT COUNT(*) FROM saved_shops WHERE user_id = ?", [$u['id']]),
                 'quotes' => (int)val("SELECT COUNT(*) FROM quote_requests WHERE user_id = ?", [$u['id']]),
                 'reviews' => (int)val("SELECT COUNT(*) FROM reviews WHERE user_id = ?", [$u['id']]),
-                'notifications' => (int)val("SELECT COUNT(*) FROM notifications WHERE (user_id = ? OR user_id IS NULL) AND is_read = 0", [$u['id']]),
+                'notifications' => (int)val("SELECT COUNT(*) FROM notifications n WHERE n.id > ? AND " . notif_where($u), [(int)$u['notif_seen_id']]),
             ],
             'has_shop' => (bool)my_shop($u)]);
 
@@ -202,9 +209,17 @@ try {
     case 'home':
         $city = (int)in('city_id', setting('default_city_id', 1));
         $lat = in('lat'); $lng = in('lng');
-        $banners = all("SELECT b.id, b.title, b.subtitle, b.image, b.shop_id FROM banners b WHERE b.status = 'active'
-            AND (b.city_id IS NULL OR b.city_id = ?) AND (b.end_date IS NULL OR b.end_date >= CURDATE()) ORDER BY b.sort, b.id", [$city]);
-        foreach ($banners as &$b) $b['image'] = upload_url($b['image']);
+        $rows = all("SELECT b.id, b.title, b.subtitle, b.image, b.video, b.media_type, b.shop_id, b.radius_km, s.lat AS slat, s.lng AS slng
+            FROM banners b LEFT JOIN shops s ON s.id = b.shop_id WHERE b.status = 'active'
+            AND (b.city_id IS NULL OR b.city_id = ?) AND (b.start_date IS NULL OR b.start_date <= CURDATE())
+            AND (b.end_date IS NULL OR b.end_date >= CURDATE()) ORDER BY b.sort, b.id", [$city]);
+        $banners = [];
+        foreach ($rows as $b) {
+            // "within N km of the linked shop" targeting — only when we know where the user is
+            if ($b['radius_km'] && $b['slat'] && $lat && $lng && haversine_m((float)$lat, (float)$lng, (float)$b['slat'], (float)$b['slng']) > $b['radius_km'] * 1000) continue;
+            $banners[] = ['id' => (int)$b['id'], 'title' => $b['title'], 'subtitle' => $b['subtitle'], 'shop_id' => $b['shop_id'] ? (int)$b['shop_id'] : null,
+                'type' => $b['media_type'] === 'video' && $b['video'] ? 'video' : 'image', 'image' => upload_url($b['image']), 'video' => upload_url($b['video'])];
+        }
         $featured = [];
         [$nearby] = shops_query(['city_id' => $city, 'lat' => $lat, 'lng' => $lng, 'limit' => 20]);
         out(['ok' => true, 'banners' => $banners,
@@ -331,9 +346,31 @@ try {
 
     case 'notifications':
         $u = auth_user();
-        $rows = all("SELECT id, title, body, is_read, DATE_FORMAT(created_at, '%d %b, %h:%i %p') AS date FROM notifications WHERE user_id = ? OR user_id IS NULL ORDER BY id DESC LIMIT 50", [$u['id']]);
-        q("UPDATE notifications SET is_read = 1 WHERE user_id = ?", [$u['id']]);
+        $rows = all("SELECT n.id, n.title, n.body, n.shop_id, n.image, DATE_FORMAT(n.created_at, '%d %b, %h:%i %p') AS date FROM notifications n
+            WHERE " . notif_where($u) . " ORDER BY n.id DESC LIMIT 50");
+        $seen = (int)$u['notif_seen_id'];
+        foreach ($rows as &$n) { $n['is_read'] = $n['id'] <= $seen ? 1 : 0; $n['image'] = upload_url($n['image']); }
+        if ($rows) q("UPDATE users SET notif_seen_id = GREATEST(notif_seen_id, ?) WHERE id = ?", [$rows[0]['id'], $u['id']]);
         out(['ok' => true, 'notifications' => $rows]);
+
+    // Polled by the Android app in the background (every ~15 min) to show phone notifications
+    case 'notifications/feed':
+        $u = auth_user(false);
+        $since = (int)in('since', 0);
+        if ($u) $where = notif_where($u);
+        else {
+            $city = (int)in('city_id', 0);
+            $where = "n.user_id IS NULL AND (n.city_id IS NULL" . ($city ? " OR n.city_id = $city" : '') . ") AND n.audience IN ('all','customer')";
+        }
+        $latest = (int)val("SELECT COALESCE(MAX(n.id), 0) FROM notifications n WHERE $where");
+        $items = $since > 0 ? all("SELECT n.id, n.title, n.body, n.shop_id FROM notifications n WHERE $where AND n.id > ? ORDER BY n.id DESC LIMIT 5", [$since]) : [];
+        out(['ok' => true, 'latest_id' => $latest, 'items' => $items]);
+
+    case 'log':
+        $raw = json_decode(file_get_contents('php://input') ?: '{}', true) ?: [];
+        $clean = fn($v) => substr(preg_replace('/[^\x20-\x7E]/', '?', (string)$v), 0, 300);
+        error_log('[APPLOG] ' . $clean($raw['app'] ?? '') . ' v' . $clean($raw['v'] ?? '') . ' ' . $clean($raw['type'] ?? '') . ' ' . $clean($raw['hash'] ?? '') . ' :: ' . $clean($raw['msg'] ?? ''));
+        out(['ok' => true]);
 
     // ---------- Shop owner ----------
     case 'owner/shop':

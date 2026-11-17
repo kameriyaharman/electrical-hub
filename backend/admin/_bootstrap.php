@@ -49,8 +49,8 @@ function page_header($title, $active, $subtitle = '', $actions = '') {
     $nav = [
         'MAIN' => [['index.php', 'dashboard', 'Dashboard', 'grid'], ['shops.php', 'shops', 'Shops & Verification', 'store'],
             ['categories.php', 'categories', 'Categories & Brands', 'tag'], ['products.php', 'products', 'Products', 'box']],
-        'PROMOTION' => [['banners.php', 'banners', 'Banners', 'image']],
-        'USERS' => [['customers.php', 'customers', 'Customers', 'users'], ['quotes.php', 'quotes', 'Quote Requests', 'file'], ['reviews.php', 'reviews', 'Reviews', 'msg']],
+        'PROMOTION' => [['banners.php', 'banners', 'Banners & Videos', 'image']],
+        'USERS' => [['customers.php', 'customers', 'Customers', 'users'], ['quotes.php', 'quotes', 'Quote Requests', 'file'], ['reviews.php', 'reviews', 'Reviews', 'msg'], ['notifications.php', 'notifications', 'Notifications', 'bell']],
         'SYSTEM' => [['cities.php', 'cities', 'Cities & Areas', 'pin'], ['settings.php', 'settings', 'Settings', 'cog']],
     ];
     $f = flash();

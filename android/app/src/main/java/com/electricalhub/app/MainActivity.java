@@ -43,6 +43,7 @@ public class MainActivity extends AppCompatActivity {
     private static final int REQ_CAMERA = 11;
     private static final int REQ_LOCATION = 12;
     private static final int REQ_FILE = 21;
+    private static final int REQ_NOTIFY = 13;
 
     private WebView web;
     private WebViewAssetLoader assetLoader;
@@ -136,7 +137,29 @@ public class MainActivity extends AppCompatActivity {
         }
 
         if (savedInstanceState != null) web.restoreState(savedInstanceState);
-        else web.loadUrl(START_URL);
+        else web.loadUrl(START_URL + routeFrom(getIntent()));
+
+        // Background check for admin notifications
+        NotifyWorker.ensureChannel(this);
+        NotifyWorker.schedule(this);
+        if (android.os.Build.VERSION.SDK_INT >= 33
+                && ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+                && hasLocationPermission()) {
+            ActivityCompat.requestPermissions(this, new String[]{Manifest.permission.POST_NOTIFICATIONS}, REQ_NOTIFY);
+        }
+    }
+
+    /** A tapped phone notification carries the screen to open, e.g. "#/shop/12". */
+    private String routeFrom(Intent i) {
+        String r = i != null ? i.getStringExtra("route") : null;
+        return (r != null && r.startsWith("#/")) ? r : "";
+    }
+
+    @Override
+    protected void onNewIntent(Intent intent) {
+        super.onNewIntent(intent);
+        final String r = routeFrom(intent);
+        if (!r.isEmpty()) web.evaluateJavascript("window.EH && window.EH.open && window.EH.open('" + r.replace("'", "") + "')", null);
     }
 
     @Override
@@ -190,6 +213,10 @@ public class MainActivity extends AppCompatActivity {
                 if (fileCallback != null) fileCallback.onReceiveValue(null);
                 fileCallback = null;
             }
+        } else if (requestCode == REQ_LOCATION && android.os.Build.VERSION.SDK_INT >= 33
+                && ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+                && pendingLocationCb == null) {
+            ActivityCompat.requestPermissions(this, new String[]{Manifest.permission.POST_NOTIFICATIONS}, REQ_NOTIFY);
         } else if (requestCode == REQ_LOCATION && pendingLocationCb != null) {
             String cb = pendingLocationCb;
             pendingLocationCb = null;
@@ -293,5 +320,19 @@ public class MainActivity extends AppCompatActivity {
 
         @JavascriptInterface
         public void openUrl(final String url) { main.post(() -> openExternal(url)); }
+
+        @JavascriptInterface
+        public void setUser(final String json) {
+            try {
+                org.json.JSONObject o = new org.json.JSONObject(json);
+                android.content.SharedPreferences sp = getSharedPreferences(NotifyWorker.PREFS, MODE_PRIVATE);
+                String oldToken = sp.getString("token", "");
+                int oldCity = sp.getInt("city_id", 0);
+                String token = o.optString("token", "");
+                int city = o.optInt("city_id", 0);
+                sp.edit().putString("token", token).putInt("city_id", city).apply();
+                if (!token.equals(oldToken) || city != oldCity) NotifyWorker.checkNow(MainActivity.this);
+            } catch (Exception ignored) { }
+        }
     }
 }
