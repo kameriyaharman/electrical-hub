@@ -8,7 +8,7 @@ function seed_database($pdo) {
         ['Admin', 'admin@electricalhub.in', password_hash('Admin@123', PASSWORD_DEFAULT)]);
 
     $settings = [
-        'app_name' => 'Electrical Hub',
+        'app_name' => 'Electrical Market Hub',
         'support_phone' => '9220892667',
         'support_whatsapp' => '9220892667',
         'support_email' => 'support@electricalhub.in',
@@ -95,7 +95,7 @@ function seed_database($pdo) {
         ['New Star Electricals', 'Anand', '9000000010', 'Retail', 3, 'Simmakkal', 9.9310, 78.1220, 'rejected', 'free', 0, [3], [], 'North Masi St, Madurai'],
         ['Rock City Electricals', 'Vijay', '9000000011', 'Retail', 4, 'Thillai Nagar', 10.8270, 78.6860, 'verified', 'free', 3.9, [1, 3, 5], [4, 9], 'Thillai Nagar, Trichy'],
         ['Salem Wires & Lights', 'Mani', '9000000012', 'Wholesale', 5, 'Fairlands', 11.6750, 78.1400, 'verified', 'free', 4.1, [1, 3], [2, 6], 'Fairlands, Salem'],
-        ['Dwarka Electrical Hub', 'Akash P.', '9000000013', 'Both', 6, 'Dwarka', 28.5921, 77.0460, 'verified', 'featured', 4.5, [1, 2, 3, 4, 5], [1, 2, 3, 7], 'Sector 7, Dwarka, New Delhi – 110075'],
+        ['Dwarka Electrical Market Hub', 'Akash P.', '9000000013', 'Both', 6, 'Dwarka', 28.5921, 77.0460, 'verified', 'featured', 4.5, [1, 2, 3, 4, 5], [1, 2, 3, 7], 'Sector 7, Dwarka, New Delhi – 110075'],
     ];
     foreach ($shops as $i => $s) {
         $expiry = $s[9] === 'free' ? null : date('Y-m-d', strtotime('+' . (10 + $i) . ' days'));

@@ -45,6 +45,8 @@ function migrate($pdo) {
             'notif_seen_id' => "INT NOT NULL DEFAULT 0",
         ],
     ];
+    // App renamed: Electrical Hub -> Electrical Market Hub
+    $pdo->exec("UPDATE settings SET v = 'Electrical Market Hub' WHERE k = 'app_name' AND v = 'Electrical Hub'");
     foreach ($want as $table => $cols) {
         $have = array_column($pdo->query("SHOW COLUMNS FROM `$table`")->fetchAll(PDO::FETCH_ASSOC), 'Field');
         foreach ($cols as $c => $def) if (!in_array($c, $have, true)) $pdo->exec("ALTER TABLE `$table` ADD COLUMN `$c` $def");

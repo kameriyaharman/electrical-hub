@@ -12,11 +12,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $err = 'Wrong email or password';
 }
 ?><!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Admin login · Electrical Hub</title>
+<title>Admin login · Electrical Market Hub</title>
 <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="assets/admin.css?v=3"></head>
 <body class="login"><form class="box f" method="post">
-<div class="logo"><span class="bolt"><?= icon('bolt') ?></span><span>Electrical<b>Hub</b></span></div>
+<div class="logo"><span class="bolt"><?= icon('bolt') ?></span><span>Electrical Market <b>Hub</b></span></div>
 <p style="text-align:center;color:var(--mute);margin:0 0 14px">Admin panel</p>
 <?php if ($err): ?><div class="flash err"><?= h($err) ?></div><?php endif; ?>
 <?= csrf_field() ?>

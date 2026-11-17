@@ -61,7 +61,7 @@ function page_header($title, $active, $subtitle = '', $actions = '') {
 <link rel="stylesheet" href="assets/admin.css?v=3">
 </head><body>
 <aside class="side" id="side">
-  <a class="logo" href="index.php"><span class="bolt"><?= icon('bolt') ?></span><span>Electrical<b>Hub</b></span></a>
+  <a class="logo" href="index.php"><span class="bolt"><?= icon('bolt') ?></span><span>Electrical Market <b>Hub</b></span></a>
   <?php foreach ($nav as $group => $items): ?>
     <div class="grp"><?= $group ?></div>
     <?php foreach ($items as $it): ?>

@@ -110,10 +110,17 @@ public class MainActivity extends AppCompatActivity {
                     }
                 } else {
                     try {
-                        Intent i = params.createIntent();
-                        i.setType("*/*");
-                        i.putExtra(Intent.EXTRA_MIME_TYPES, new String[]{"image/*", "application/pdf"});
-                        startActivityForResult(Intent.createChooser(i, "Upload list"), REQ_FILE);
+                        String[] acc = params.getAcceptTypes();
+                        boolean imagesOnly = acc != null && acc.length > 0 && acc[0] != null && acc[0].startsWith("image");
+                        Intent i = new Intent(Intent.ACTION_GET_CONTENT);
+                        i.addCategory(Intent.CATEGORY_OPENABLE);
+                        if (imagesOnly) i.setType("image/*");
+                        else {
+                            i.setType("*/*");
+                            i.putExtra(Intent.EXTRA_MIME_TYPES, new String[]{"image/*", "application/pdf"});
+                        }
+                        if (params.getMode() == FileChooserParams.MODE_OPEN_MULTIPLE) i.putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true);
+                        startActivityForResult(Intent.createChooser(i, imagesOnly ? "Choose shop photos" : "Upload list"), REQ_FILE);
                     } catch (ActivityNotFoundException e) {
                         fileCallback.onReceiveValue(null);
                         fileCallback = null;
@@ -194,7 +201,11 @@ public class MainActivity extends AppCompatActivity {
         if (resultCode == RESULT_OK) {
             if (requestCode == REQ_CAMERA && cameraUri != null) result = new Uri[]{cameraUri};
             else if (requestCode == REQ_FILE && data != null) {
-                if (data.getClipData() != null && data.getClipData().getItemCount() > 0) result = new Uri[]{data.getClipData().getItemAt(0).getUri()};
+                if (data.getClipData() != null && data.getClipData().getItemCount() > 0) {
+                    int n = data.getClipData().getItemCount();
+                    result = new Uri[n];
+                    for (int k = 0; k < n; k++) result[k] = data.getClipData().getItemAt(k).getUri();
+                }
                 else if (data.getData() != null) result = new Uri[]{data.getData()};
             }
         }

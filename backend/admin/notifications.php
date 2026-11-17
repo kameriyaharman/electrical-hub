@@ -38,7 +38,7 @@ page_header('Notifications', 'notifications', 'Send a message to app users — b
 <div class="split" style="grid-template-columns:380px 1fr">
 <form class="card f" method="post" enctype="multipart/form-data"><?= csrf_field() ?><h3>New notification</h3>
   <label>Title *</label><input type="text" name="title" maxlength="150" required placeholder="Diwali offer — 20% off on LED lights">
-  <label>Message</label><textarea name="body" maxlength="500" placeholder="Visit your nearest shop on Electrical Hub…"></textarea>
+  <label>Message</label><textarea name="body" maxlength="500" placeholder="Visit your nearest shop on Electrical Market Hub…"></textarea>
   <div class="fr"><div><label>Send to</label><select name="audience"><?php foreach ($audLabel as $k => $l): ?><option value="<?= $k ?>"><?= $l ?></option><?php endforeach; ?></select></div>
   <div><label>City</label><select name="city_id"><option value="">All cities</option><?php foreach ($cities as $c): ?><option value="<?= $c['id'] ?>"><?= h($c['name']) ?></option><?php endforeach; ?></select></div></div>
   <label>Tap opens shop (optional)</label><select name="shop_id"><option value="">— none —</option><?php foreach ($shops as $s): ?><option value="<?= $s['id'] ?>"><?= h($s['name']) ?></option><?php endforeach; ?></select>

@@ -420,14 +420,15 @@ try {
         $u = auth_user();
         $s = my_shop($u);
         if (!$s) fail('Create your shop first');
-        if (in('source', 'camera') !== 'camera') fail('Photos must be taken live with the camera');
+        $source = in('source', 'camera') === 'gallery' ? 'gallery' : 'camera';
         $limit = MAX_SHOP_PHOTOS;
         $have = (int)val("SELECT COUNT(*) FROM shop_photos WHERE shop_id = ?", [$s['id']]);
         if ($have >= $limit) fail("Maximum $limit photos per shop. Delete an old photo to add a new one.");
         $path = save_upload($_FILES['photo'] ?? null, 'shops/' . $s['id'], ['jpg', 'jpeg', 'png', 'webp']);
         $lat = in('lat') !== null && in('lat') !== '' ? (float)in('lat') : null; $lng = in('lng') !== null && in('lng') !== '' ? (float)in('lng') : null;
         $dist = ($lat && $lng && $s['lat'] && $s['lng']) ? haversine_m($lat, $lng, (float)$s['lat'], (float)$s['lng']) : null;
-        q("INSERT INTO shop_photos (shop_id, path, label, lat, lng, distance_m, source) VALUES (?,?,?,?,?,?, 'camera')", [$s['id'], $path, in('label'), $lat, $lng, $dist]);
+        if ($source === 'gallery') { $lat = $lng = $dist = null; }
+        q("INSERT INTO shop_photos (shop_id, path, label, lat, lng, distance_m, source) VALUES (?,?,?,?,?,?,?)", [$s['id'], $path, in('label'), $lat, $lng, $dist, $source]);
         out(['ok' => true, 'id' => last_id(), 'url' => upload_url($path), 'distance_m' => $dist]);
 
     case 'owner/photo/delete':

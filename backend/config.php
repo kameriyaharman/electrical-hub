@@ -1,6 +1,6 @@
 <?php
 /**
- * Electrical Hub — configuration
+ * Electrical Market Hub — configuration
  *
  * Railway: values come from environment variables automatically.
  * BigRock (cPanel): replace the fallback values ('localhost', 'your_db' ...)
@@ -24,7 +24,7 @@ define('DB_PASS', env_or(['DB_PASS', 'MYSQLPASSWORD'], 'your_db_password'));
 // Used to sign admin sessions. Change this on BigRock to any long random string.
 define('APP_SECRET', env_or('APP_SECRET', 'change-this-to-a-long-random-string'));
 
-define('APP_NAME', 'Electrical Hub');
+define('APP_NAME', 'Electrical Market Hub');
 define('UPLOAD_DIR', env_or('UPLOAD_DIR', __DIR__ . '/uploads'));
 define('UPLOAD_URL', 'uploads');
 define('MAX_SHOP_PHOTOS', 10);   // photos allowed per shop

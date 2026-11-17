@@ -145,7 +145,8 @@ page_header('Shops & Verification', 'shops', 'Every shop listing — live-photo 
     $radius = (int)setting('gps_match_radius_m', 200);
     $dists = array_filter(array_column($photos, 'distance_m'), fn($d) => $d !== null);
     $maxDist = $dists ? max($dists) : null;
-    $cameraOnly = $photos && !array_filter($photos, fn($x) => $x['source'] !== 'camera');
+    $nCam = count(array_filter($photos, fn($x) => $x['source'] === 'camera'));
+    $cameraOnly = $photos && $nCam === count($photos);
     $dup = all("SELECT id, name FROM shops WHERE id <> ? AND (mobile = ? OR (name = ? AND city_id <=> ?)) LIMIT 3", [$v['id'], $v['mobile'], $v['name'], $v['city_id']]);
     $cats = all("SELECT c.name FROM shop_categories sc JOIN categories c ON c.id = sc.category_id WHERE sc.shop_id = ?", [$v['id']]);
     $brs = all("SELECT b.name FROM shop_brands sb JOIN brands b ON b.id = sb.brand_id WHERE sb.shop_id = ?", [$v['id']]);
@@ -155,11 +156,11 @@ page_header('Shops & Verification', 'shops', 'Every shop listing — live-photo 
   <div style="font-size:12.5px;color:var(--mute);margin-top:-6px"><?= h($v['address'] ?: ($v['area'] . ', ' . $v['city'])) ?></div>
   <div class="thumbs">
     <?php foreach ($photos as $ph): ?>
-      <a href="<?= h(upload_url($ph['path'])) ?>" target="_blank"><img src="<?= h(upload_url($ph['path'])) ?>" alt=""><span><?= h($ph['label']) ?> · <?= date('d M H:i', strtotime($ph['taken_at'])) ?></span></a>
+      <a href="<?= h(upload_url($ph['path'])) ?>" target="_blank"><img src="<?= h(upload_url($ph['path'])) ?>" alt=""><span><?= h($ph['label']) ?> · <?= $ph['source'] === 'camera' ? '📷 ' : '🖼 ' ?><?= date('d M H:i', strtotime($ph['taken_at'])) ?></span></a>
     <?php endforeach; ?>
   </div>
   <div class="vlist">
-    <div><span>Photos</span><?= count($photos) ? '<b class="' . ($cameraOnly ? 'ok' : 'warn') . '">' . count($photos) . ' · ' . ($cameraOnly ? 'camera only ✓' : 'check source') . '</b>' : '<b class="bad">Missing ✕</b>' ?></div>
+    <div><span>Photos</span><?= count($photos) ? '<b class="' . ($nCam ? 'ok' : 'warn') . '">' . count($photos) . ' · ' . $nCam . ' live camera' . (count($photos) - $nCam ? ', ' . (count($photos) - $nCam) . ' gallery/admin' : '') . '</b>' : '<b class="bad">Missing ✕</b>' ?></div>
     <div><span>GPS match</span><?php if ($maxDist === null): ?><b class="warn">No GPS on photos</b><?php elseif ($maxDist <= $radius): ?><b class="ok">Within <?= $maxDist ?> m of pin ✓</b><?php else: ?><b class="bad"><?= $maxDist ?> m away ✕</b><?php endif; ?></div>
     <div><span>Mobile OTP</span><?= $v['mobile_verified'] ? '<b class="ok">Verified ✓</b>' : '<b class="warn">Not verified</b>' ?></div>
     <div><span>GSTIN</span><b><?= $v['gstin'] ? h($v['gstin']) : '<span style="color:var(--mute);font-weight:400">Not given</span>' ?></b></div>

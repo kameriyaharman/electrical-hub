@@ -1,4 +1,4 @@
-/* Electrical Hub — customer + shop-owner app (runs in the Android WebView and in any browser) */
+/* Electrical Market Hub — customer + shop-owner app (runs in the Android WebView and in any browser) */
 (function () {
 'use strict';
 
@@ -157,14 +157,14 @@ function openExt(url) {
 }
 function lead(id, type) { api('lead', { body: { shop_id: id, type } }).catch(() => {}); }
 function callShop(s) { lead(s.id, 'call'); openExt('tel:+91' + s.mobile); }
-function waShop(s, text) { lead(s.id, 'whatsapp'); openExt('https://wa.me/91' + (s.whatsapp || s.mobile) + '?text=' + encodeURIComponent(text || ('Hi ' + s.name + ', I found your shop on Electrical Hub. '))); }
+function waShop(s, text) { lead(s.id, 'whatsapp'); openExt('https://wa.me/91' + (s.whatsapp || s.mobile) + '?text=' + encodeURIComponent(text || ('Hi ' + s.name + ', I found your shop on Electrical Market Hub. '))); }
 function dirShop(s) { lead(s.id, 'directions'); openExt(s.lat ? 'https://www.google.com/maps/dir/?api=1&destination=' + s.lat + ',' + s.lng : 'https://www.google.com/maps/search/' + encodeURIComponent(s.name + ' ' + (s.address || ''))); }
 function shareText(text) {
   if (NATIVE && NATIVE.share) NATIVE.share(text);
   else if (navigator.share) navigator.share({ text }).catch(() => {});
   else { navigator.clipboard && navigator.clipboard.writeText(text); toast('Copied to clipboard'); }
 }
-function shareShop(s) { lead(s.id, 'share'); shareText(s.name + ' — ' + (s.address || s.area || '') + '\nCall: +91 ' + s.mobile + (s.lat ? '\nMap: https://maps.google.com/?q=' + s.lat + ',' + s.lng : '') + '\n\nFound on Electrical Hub app'); }
+function shareShop(s) { lead(s.id, 'share'); shareText(s.name + ' — ' + (s.address || s.area || '') + '\nCall: +91 ' + s.mobile + (s.lat ? '\nMap: https://maps.google.com/?q=' + s.lat + ',' + s.lng : '') + '\n\nFound on Electrical Market Hub app'); }
 
 // ---------- shop card ----------
 function tags(s) {
@@ -205,7 +205,7 @@ new MutationObserver(() => { if (BIND_PENDING) return; BIND_PENDING = true; Prom
 // Lightweight remote log (errors + screen changes) so problems on real phones show up in the server logs
 function rlog(type, msg) {
   try {
-    const body = JSON.stringify({ type, msg: String(msg).slice(0, 300), hash: location.hash, app: NATIVE ? 'android' : 'web', v: '1.5' });
+    const body = JSON.stringify({ type, msg: String(msg).slice(0, 300), hash: location.hash, app: NATIVE ? 'android' : 'web', v: '1.7' });
     if (navigator.sendBeacon) navigator.sendBeacon(API + '?r=log', new Blob([body], { type: 'text/plain' }));
     else fetch(API + '?r=log', { method: 'POST', body }).catch(() => {});
   } catch (e) {}
@@ -242,7 +242,7 @@ function setCity(c) {
 function screenLogin() {
   let role = S.role || 'customer', mobile = '', step = 1, demo = '';
   const draw = () => {
-    render('<div class="login"><div class="top"><div class="big">' + BOLT + '</div><h2>Electrical <b>Hub</b></h2><p>Every electrical shop near you — in one app</p></div>' +
+    render('<div class="login"><div class="top"><div class="big">' + BOLT + '</div><h2>Electrical Market <b>Hub</b></h2><p>Every electrical shop near you — in one app</p></div>' +
       '<div class="box">' + (step === 1 ?
         '<label class="l">Mobile number</label><div style="display:flex;gap:8px"><span class="inp" style="width:auto;flex:none;color:var(--mute)">+91</span><input class="inp" id="mob" type="tel" inputmode="numeric" maxlength="10" placeholder="98xxxxxx10" value="' + esc(mobile) + '"></div>' +
         '<div class="roles"><button data-role="customer" class="' + (role === 'customer' ? 'on' : '') + '">I am a customer</button><button data-role="owner" class="' + (role === 'owner' ? 'on' : '') + '">I own a shop</button></div>' +
@@ -302,7 +302,7 @@ function needLogin(msg) {
 // ---------- Home ----------
 async function screenHome() {
   const cname = S.city ? S.city.name + (S.city.state ? ', ' + S.city.state : '') : 'Choose city';
-  render('<div class="scr"><div class="home-hd"><div class="row"><div class="brand"><span class="bolt">' + BOLT + '</span>Electrical <b>Hub</b></div><span style="flex:1"></span>' +
+  render('<div class="scr"><div class="home-hd"><div class="row"><div class="brand"><span class="bolt">' + BOLT + '</span>Electrical Market <b>Hub</b></div><span style="flex:1"></span>' +
     '<button data-href="#/notifications" style="border:0;background:none;color:#fff;display:flex;cursor:pointer">' + icon('bell') + '</button></div>' +
     '<button class="city" id="city">' + icon('pin') + esc(cname) + ' ▾</button>' +
     '<form class="srch" id="sf">' + icon('search') + '<input id="q" placeholder="Search shops, products, brands..." enterkeyhint="search"></form></div>' +
@@ -542,7 +542,7 @@ async function screenQuoteView(id) {
       '<div class="h5">Replies</div><div class="card">' + q.replies.map(r => '<div class="reply"><div><b>' + esc(r.name) + '</b><div class="muted">' + esc(r.area || '') + (r.reply_note ? ' · ' + esc(r.reply_note) : '') + '</div></div><div style="text-align:right">' + (r.replied_at ? '<b>' + inr(r.reply_amount) + '</b><div class="muted">' + esc(r.delivery || '') + '</div><div class="ico-btns" style="justify-content:flex-end;margin-top:4px"><button class="cb call" data-qc="' + r.shop_id + '">' + icon('phone') + '</button><button class="cb wa" data-qw="' + r.shop_id + '">' + icon('wa') + '</button></div>' : '<span class="muted">awaiting</span>') + '</div></div>').join('') + '</div>' +
       '<p class="muted" style="text-align:center">Shops reply with their best price. Pull down / reopen to refresh.</p>';
     document.querySelectorAll('[data-qc]').forEach(b => b.onclick = () => callShop(CARD_CACHE['q' + b.dataset.qc]));
-    document.querySelectorAll('[data-qw]').forEach(b => b.onclick = () => waShop(CARD_CACHE['q' + b.dataset.qw], 'Hi, about your quote for ' + q.code + ' on Electrical Hub: '));
+    document.querySelectorAll('[data-qw]').forEach(b => b.onclick = () => waShop(CARD_CACHE['q' + b.dataset.qw], 'Hi, about your quote for ' + q.code + ' on Electrical Market Hub: '));
     const att = document.getElementById('att'); if (att) att.onclick = e => { e.preventDefault(); openExt(q.attachment); };
   } catch (e) { document.getElementById('qv').innerHTML = '<div class="empty">' + esc(e.message) + '</div>'; }
 }
@@ -571,7 +571,7 @@ async function screenAccount() {
       li('bell', 'Notifications', d.counts.notifications ? d.counts.notifications + ' new' : '', '#/notifications') + li('pin', 'Change city', '', 'city') +
       (d.has_shop ? li('store', 'My shop dashboard', '', '#/owner') : li('store', 'List your shop (free)', '', '#/owner')) + li('help', 'Help & support', '', 'help') + li('logout', 'Logout', '', 'logout') + '</div>' +
       (d.has_shop ? '' : '<div class="own" data-href="#/owner">' + icon('store') + '<div><b>Own an electrical shop?</b><small>Get listed free & get customer calls</small></div></div>') +
-      '<p class="muted" style="text-align:center">Electrical Hub v1.0</p>';
+      '<p class="muted" style="text-align:center">Electrical Market Hub v1.7</p>';
     bindAccount();
     document.getElementById('ed').onclick = () => {
       const box = sheet('<h3>Your name</h3><input class="inp" id="nm" value="' + esc(d.user.name || '') + '"><button class="btn blk" id="sv" style="margin-top:12px">Save</button>');
@@ -589,7 +589,7 @@ function bindAccount() {
 async function helpSheet() {
   const m = await meta();
   const box = sheet('<h3>Help & support</h3><p class="muted">We usually reply within a few hours.</p><button class="btn blk wa" id="hw">' + icon('wa') + ' WhatsApp support</button><button class="btn blk o" id="hc" style="margin-top:10px">' + icon('phone') + ' Call ' + esc(m.support.phone) + '</button>' + (m.support.email ? '<p class="muted" style="text-align:center">' + esc(m.support.email) + '</p>' : ''));
-  box.querySelector('#hw').onclick = () => openExt('https://wa.me/91' + m.support.whatsapp + '?text=' + encodeURIComponent('Hi Electrical Hub, I need help with '));
+  box.querySelector('#hw').onclick = () => openExt('https://wa.me/91' + m.support.whatsapp + '?text=' + encodeURIComponent('Hi Electrical Market Hub, I need help with '));
   box.querySelector('#hc').onclick = () => openExt('tel:+91' + m.support.phone);
 }
 async function screenSaved() {
@@ -632,7 +632,7 @@ async function screenOwner() {
     : s.status === 'blocked' ? '<span class="pill" style="background:#FDE8E8;color:#C22B31">Blocked</span> <span style="opacity:.8;font-size:12px">· contact support</span>'
     : '<span class="pill" style="background:#eee;color:#555">Incomplete</span>';
   const q = d.quotes.find(x => !x.replied_at);
-  render('<div class="scr nonav"><div class="dash-hd"><div style="display:flex;align-items:center;justify-content:space-between"><div class="brand"><span class="bolt">' + BOLT + '</span>Electrical <b>Hub</b></div>' +
+  render('<div class="scr nonav"><div class="dash-hd"><div style="display:flex;align-items:center;justify-content:space-between"><div class="brand"><span class="bolt">' + BOLT + '</span>Electrical Market <b>Hub</b></div>' +
     '</div>' +
     '<h2>' + esc(s.name) + '</h2>' + statusPill + '</div>' +
     (s.status === 'rejected' ? '<div class="wrap"><div class="note">Admin asked for changes: <b>' + esc(s.reject_reason || '') + '</b>. Fix it and tap <b>Submit again</b>.<br><button class="btn sm" id="resub" style="margin-top:8px">Submit again</button></div></div>' : '') +
@@ -645,7 +645,7 @@ async function screenOwner() {
     li('clock', 'Shop timings', '', '#/owner/edit?step=4') + li('store', 'Shop details & location', '', '#/owner/edit?step=2') + li('star', 'Reviews (' + st.reviews + ')', '', '#/owner/reviews') + li('file', 'All quote requests', '', '#/owner/quotes') +
     li('search', 'Browse as customer', '', '#/home') + '</div></div>');
   bindAccount();
-  if (q) { document.getElementById('sp').onclick = () => replySheet(q); document.getElementById('sw').onclick = () => openExt('https://wa.me/91' + q.customer_mobile + '?text=' + encodeURIComponent('Hi ' + (q.customer_name || '') + ', this is ' + s.name + ' from Electrical Hub regarding your requirement ' + q.code + ': ')); }
+  if (q) { document.getElementById('sp').onclick = () => replySheet(q); document.getElementById('sw').onclick = () => openExt('https://wa.me/91' + q.customer_mobile + '?text=' + encodeURIComponent('Hi ' + (q.customer_name || '') + ', this is ' + s.name + ' from Electrical Market Hub regarding your requirement ' + q.code + ': ')); }
   const rs = document.getElementById('resub'); if (rs) rs.onclick = async () => { try { await api('owner/submit', { body: {} }); toast('Sent for verification'); route(); } catch (e) { toast(e.message); } };
 }
 function replySheet(q) {
@@ -667,7 +667,7 @@ async function screenOwnerQuotes() {
   document.getElementById('oq').innerHTML = d.quotes.length ? d.quotes.map((q, i) => '<div class="card" style="margin-bottom:10px"><div style="display:flex;justify-content:space-between"><b>' + esc(q.code) + '</b><span class="muted">' + esc(q.date) + '</span></div><div style="white-space:pre-line;font-size:13px;margin:4px 0">' + esc(q.items) + '</div><div class="muted">' + esc(q.customer_name || '') + ' · ' + esc(q.area || '') + '</div>' +
     (q.replied_at ? '<div style="color:var(--green2);font-weight:600;margin-top:6px">You quoted ' + inr(q.reply_amount) + '</div>' : '<div style="display:flex;gap:8px;margin-top:8px"><button class="btn sm" style="flex:1" data-rq="' + i + '">Send price</button><button class="btn sm wa" style="flex:1" data-wq="' + i + '">WhatsApp</button></div>') + '</div>').join('') : '<div class="empty"><div class="big">📭</div>No quote requests yet. Featured & Premium shops get more requests.</div>';
   document.querySelectorAll('[data-rq]').forEach(b => b.onclick = () => replySheet(d.quotes[b.dataset.rq]));
-  document.querySelectorAll('[data-wq]').forEach(b => b.onclick = () => { const q = d.quotes[b.dataset.wq]; openExt('https://wa.me/91' + q.customer_mobile + '?text=' + encodeURIComponent('Hi, this is ' + d.shop.name + ' from Electrical Hub regarding ' + q.code + ': ')); });
+  document.querySelectorAll('[data-wq]').forEach(b => b.onclick = () => { const q = d.quotes[b.dataset.wq]; openExt('https://wa.me/91' + q.customer_mobile + '?text=' + encodeURIComponent('Hi, this is ' + d.shop.name + ' from Electrical Market Hub regarding ' + q.code + ': ')); });
 }
 
 // ----- Listing wizard: step 2 details, 3 categories/brands, 4 location & timings -----
@@ -743,7 +743,7 @@ async function screenOwnerEdit(p) {
   };
 }
 
-// ----- Live photos (camera only, GPS + time stamp) -----
+// ----- Shop photos: live camera (GPS + time stamp) or from gallery -----
 const REQUIRED = ['Shop front', 'Inside view', 'Product shelves', 'Billing counter'];
 async function screenOwnerPhotos() {
   if (needLogin()) return;
@@ -753,9 +753,10 @@ async function screenOwnerPhotos() {
   const ph = OWNER.photos;
   const have = new Set(ph.map(x => x.label));
   const next = REQUIRED.find(r => !have.has(r)) || 'More';
-  render('<div class="scr nonav">' + hd('Live shop photos') + '<div class="wrap"><div class="note">📸 Photos must be clicked live from the shop (camera only, no gallery) — shows customers your real shop. GPS & time stamp added.</div>' +
+  render('<div class="scr nonav">' + hd('Shop photos') + '<div class="wrap"><div class="note">📸 Take a live photo at the shop (GPS & time stamp added — customers trust these more) or pick photos from your gallery. Up to 10 photos.</div>' +
     '<div class="pgrid">' + ph.map(x => '<div class="p" style="background-image:url(\'' + esc(x.url) + '\')"><span>' + esc(x.label || '') + ' · ' + esc(x.taken_at) + '</span><button data-del="' + x.id + '">×</button></div>').join('') +
-    (ph.length < 10 ? '<label class="p take">' + icon('camera') + 'Take photo<small class="muted" style="font-weight:400">' + esc(next) + ' · ' + ph.length + '/10</small><input type="file" id="cam" accept="image/*" capture="environment" hidden></label>' : '') + '</div>' +
+    (ph.length < 10 ? '<label class="p take">' + icon('camera') + 'Take photo<small class="muted" style="font-weight:400">' + esc(next) + ' · ' + ph.length + '/10</small><input type="file" id="cam" accept="image/*" capture="environment" hidden></label>' +
+      '<label class="p take">' + icon('upload') + 'From gallery<small class="muted" style="font-weight:400">choose photos</small><input type="file" id="gal" accept="image/*" multiple hidden></label>' : '') + '</div>' +
     (ph.length >= 10 ? '<p class="muted">10/10 photos — delete an old photo to add a new one.</p>' : '') +
     '<div class="h5">Required</div><div class="req">' + REQUIRED.map(r => '<div class="' + (have.has(r) ? 'done' : '') + '">' + icon('check') + r + '</div>').join('') + '</div></div>' +
     '<div class="foot"><button class="btn" id="sub">' + (OWNER.status === 'verified' ? 'Done' : 'Submit for verification') + '</button></div></div>');
@@ -774,14 +775,30 @@ async function screenOwnerPhotos() {
       screenOwnerPhotos();
     } catch (er) { toast(er.message); }
   };
+  if (document.getElementById('gal')) document.getElementById('gal').onchange = async e => {
+    const files = [...e.target.files].slice(0, 10 - ph.length); if (!files.length) return;
+    let ok = 0, labels = REQUIRED.filter(r => !have.has(r));
+    for (const f of files) {
+      toast('Uploading ' + (ok + 1) + ' of ' + files.length + '…', 8000);
+      try {
+        const label = labels.shift() || 'More';
+        const blob = await stampPhoto(f, null, label, true);
+        const fd = new FormData();
+        fd.append('photo', blob, 'gallery.jpg'); fd.append('label', label); fd.append('source', 'gallery');
+        await api('owner/photo', { form: fd }); ok++;
+      } catch (er) { toast(er.message); break; }
+    }
+    if (ok) toast(ok + ' photo' + (ok > 1 ? 's' : '') + ' added');
+    screenOwnerPhotos();
+  };
   document.querySelectorAll('[data-del]').forEach(b => b.onclick = async () => { if (!confirm('Delete this photo?')) return; await api('owner/photo/delete', { body: { id: b.dataset.del } }).catch(e => toast(e.message)); screenOwnerPhotos(); });
   document.getElementById('sub').onclick = async () => {
     if (OWNER.status === 'verified') return goBackTo('#/owner');
-    if (!ph.length) return toast('Take at least one live photo');
+    if (!ph.length) return toast('Add at least one photo of your shop');
     try { await api('owner/submit', { body: {} }); toast('Submitted! We will verify within 24 hours.'); goBackTo('#/owner'); } catch (e) { toast(e.message); }
   };
 }
-function stampPhoto(file, loc, label) {
+function stampPhoto(file, loc, label, plain) {
   return new Promise((resolve, reject) => {
     const img = new Image();
     img.onload = () => {
@@ -789,11 +806,12 @@ function stampPhoto(file, loc, label) {
       const w = Math.round(img.width * sc), h = Math.round(img.height * sc);
       const c = document.createElement('canvas'); c.width = w; c.height = h;
       const x = c.getContext('2d'); x.drawImage(img, 0, 0, w, h);
+      if (plain) { c.toBlob(b => b ? resolve(b) : reject(new Error('Could not process photo')), 'image/jpeg', .85); URL.revokeObjectURL(img.src); return; }
       const fs = Math.max(14, Math.round(w / 45)), bar = fs * 2.6;
       x.fillStyle = 'rgba(18,18,18,.72)'; x.fillRect(0, h - bar, w, bar);
       x.fillStyle = '#FF7A00'; x.font = '600 ' + fs + 'px sans-serif';
       const d = new Date(), ts = d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) + ' ' + d.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
-      x.fillText('⚡ Electrical Hub · ' + label, fs * .8, h - bar + fs * 1.15);
+      x.fillText('⚡ Electrical Market Hub · ' + label, fs * .8, h - bar + fs * 1.15);
       x.fillStyle = '#fff'; x.font = fs * .85 + 'px sans-serif';
       x.fillText((loc ? '📍 ' + loc.lat.toFixed(5) + ', ' + loc.lng.toFixed(5) + '  ·  ' : '') + '🕒 ' + ts, fs * .8, h - bar + fs * 2.2);
       c.toBlob(b => b ? resolve(b) : reject(new Error('Could not process photo')), 'image/jpeg', .85);
@@ -822,7 +840,7 @@ async function screenOwnerReviews() {
   if (needLogin()) return;
   render('<div class="scr nonav">' + hd('Reviews') + '<div class="wrap" id="or">' + loading() + '</div></div>');
   const d = await api('owner/reviews');
-  document.getElementById('or').innerHTML = d.reviews.length ? '<div class="card">' + d.reviews.map(r => '<div class="rev"><b>' + esc(r.customer_name) + '</b> <span class="stars">' + '★'.repeat(r.rating) + '</span><div class="muted">' + esc(r.date) + '</div><div>' + esc(r.body || '') + '</div></div>').join('') + '</div>' : '<div class="empty">No reviews yet. Ask happy customers to rate you on Electrical Hub!</div>';
+  document.getElementById('or').innerHTML = d.reviews.length ? '<div class="card">' + d.reviews.map(r => '<div class="rev"><b>' + esc(r.customer_name) + '</b> <span class="stars">' + '★'.repeat(r.rating) + '</span><div class="muted">' + esc(r.date) + '</div><div>' + esc(r.body || '') + '</div></div>').join('') + '</div>' : '<div class="empty">No reviews yet. Ask happy customers to rate you on Electrical Market Hub!</div>';
 }
 
 // ----- Plans -----
