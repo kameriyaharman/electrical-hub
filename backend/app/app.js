@@ -295,7 +295,8 @@ async function screenHome() {
     bindCards(d.nearby);
     const banners = d.banners.length ? d.banners : [{ title: 'All Electrical Products in One Place' }];
     let h = '<div class="banners">' + banners.map((b, i) => '<div class="bnr" ' + (b.image ? 'style="background-image:url(\'' + esc(b.image) + '\')"' : '') + (b.shop_id ? ' data-shop="' + b.shop_id + '"' : '') + '>' +
-      (b.image ? '' : '<b>' + (i === 0 ? esc(b.title).replace(/in One Place/i, '<em>in One Place</em>') : esc(b.title)) + '</b>' + (b.subtitle ? '<small>' + esc(b.subtitle) + '</small>' : '') + '<span class="art">' + (i % 2 ? '💡' : '🔌') + '</span>') + '</div>').join('') + '</div>';
+      (b.image ? '' : '<b>' + (i === 0 ? esc(b.title).replace(/in One Place/i, '<em>in One Place</em>') : esc(b.title)) + '</b>' + (b.subtitle ? '<small>' + esc(b.subtitle) + '</small>' : '') + '<span class="art">' + (i % 2 ? '💡' : '🔌') + '</span>') + '</div>').join('') + '</div>' +
+      (banners.length > 1 ? '<div class="dots">' + banners.map((b, i) => '<i class="' + (i ? '' : 'on') + '"></i>').join('') + '</div>' : '');
     h += '<div class="sec"><h3>Categories</h3></div><div class="cats">' + d.categories.map(c => '<div class="cat" data-href="#/shops?category_id=' + c.id + '&cname=' + encodeURIComponent(c.name) + '"><div class="em">' + (c.image ? '<img src="' + esc(c.image) + '">' : esc(c.icon || emojiFor(c.name))) + '</div>' + esc(c.name) + '</div>').join('') + '</div>';
     const rest = d.nearby;
     if (rest.length) h += '<div class="sec"><h3>' + (loc ? 'Shops near you' : 'Shops in your city') + '</h3><a href="#/shops">View all</a></div>' + rest.map(shopCard).join('');
@@ -303,7 +304,31 @@ async function screenHome() {
     h += '<div class="own" data-href="#/owner">' + icon('store') + '<div><b>Own an electrical shop?</b><small>Get listed free & get customer calls</small></div></div>';
     document.getElementById('body').innerHTML = h;
     const c2 = document.getElementById('chg2'); if (c2) c2.onclick = e => { e.preventDefault(); pickCity(); };
+    startSlider();
   } catch (e) { document.getElementById('body').innerHTML = '<div class="empty">' + esc(e.message) + '<br><br><button class="btn sm" onclick="location.reload()">Retry</button></div>'; }
+}
+
+// Home banner slider: auto-advances every 3 s, loops, pauses while the user is touching it
+let SLIDER = null;
+function stopSlider() { if (SLIDER) { clearInterval(SLIDER.t); SLIDER = null; } }
+function startSlider() {
+  stopSlider();
+  const el = document.querySelector('.banners');
+  if (!el || el.children.length < 2) return;
+  const dots = [...document.querySelectorAll('.dots i')];
+  const n = el.children.length;
+  const cur = () => Math.round(el.scrollLeft / (el.children[0].offsetWidth + 10));
+  const mark = () => { const i = cur(); dots.forEach((d, k) => d.classList.toggle('on', k === i)); };
+  const st = SLIDER = { t: 0, hold: false };
+  el.addEventListener('scroll', mark, { passive: true });
+  el.addEventListener('touchstart', () => { st.hold = true; }, { passive: true });
+  el.addEventListener('touchend', () => { setTimeout(() => { st.hold = false; }, 1500); }, { passive: true });
+  st.t = setInterval(() => {
+    if (!document.body.contains(el)) return stopSlider();
+    if (st.hold || document.hidden) return;
+    const next = (cur() + 1) % n;
+    el.scrollTo({ left: next * (el.children[0].offsetWidth + 10), behavior: 'smooth' });
+  }, 3000);
 }
 
 // ---------- Shops list ----------
@@ -801,6 +826,7 @@ function parse() {
 }
 function route() {
   LAST_ROUTED = curHash();
+  stopSlider();
   closeSheet();
   const { parts, params } = parse();
   const [a, b] = parts;
