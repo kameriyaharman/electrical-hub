@@ -321,7 +321,7 @@ async function screenHome() {
       '<div class="bnr" ' + (b.image ? 'style="background-image:url(\'' + esc(b.image) + '\')"' : '') + (b.shop_id ? ' data-shop="' + b.shop_id + '"' : '') + '>' +
       (b.image ? '' : '<b>' + (i === 0 ? esc(b.title).replace(/in One Place/i, '<em>in One Place</em>') : esc(b.title)) + '</b>' + (b.subtitle ? '<small>' + esc(b.subtitle) + '</small>' : '') + '<span class="art">' + (i % 2 ? '💡' : '🔌') + '</span>') + '</div>').join('') + '</div>' +
       (banners.length > 1 ? '<div class="dots">' + banners.map((b, i) => '<i class="' + (i ? '' : 'on') + '"></i>').join('') + '</div>' : '');
-    h += '<div class="sec"><h3>Categories</h3></div><div class="cats">' + d.categories.map(c => '<div class="cat" data-href="#/shops?category_id=' + c.id + '&cname=' + encodeURIComponent(c.name) + '"><div class="em">' + (c.image ? '<img src="' + esc(c.image) + '">' : esc(c.icon || emojiFor(c.name))) + '</div>' + esc(c.name) + '</div>').join('') + '</div>';
+    h += '<div class="sec"><h3>Categories</h3><a href="#/products">View all</a></div><div class="cats">' + d.categories.map(c => '<div class="cat" data-href="#/shops?category_id=' + c.id + '&cname=' + encodeURIComponent(c.name) + '"><div class="em">' + (c.image ? '<img src="' + esc(c.image) + '">' : esc(c.icon || emojiFor(c.name))) + '</div>' + esc(c.name) + '</div>').join('') + '</div>';
     const rest = d.nearby;
     if (rest.length) h += '<div class="sec"><h3>' + (loc ? 'Shops near you' : 'Shops in your city') + '</h3><a href="#/shops">View all</a></div>' + rest.map(shopCard).join('');
     if (!rest.length) h += '<div class="empty"><div class="big">🏪</div>No shops listed in this city yet.<br><a href="#" id="chg2" style="color:var(--blue)">Change city</a></div>';
