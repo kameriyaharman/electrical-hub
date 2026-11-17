@@ -36,7 +36,7 @@ page_header('Quote Requests, Leads & Reviews', 'quotes', 'Customer requirements 
 <form class="filters" style="padding:0 8px"><input type="text" name="q" placeholder="Search…" value="<?= h($qq) ?>"><button class="btn">Search</button></form>
 <div class="tw"><table><tr><th>Request</th><th>Customer</th><th>Items</th><th>Area</th><th>Sent to</th><th>Replies</th><th>Status</th></tr>
 <?php if (!$rows): ?><tr><td colspan="7" class="empty">No quote requests yet</td></tr><?php endif; ?>
-<?php foreach ($rows as $r): ?><tr<?= $view && $view['id'] == $r['id'] ? ' style="background:#F6F9FF"' : '' ?>><td><a href="?view=<?= $r['id'] ?>"><b><?= h($r['code']) ?></b></a><small><?= date('d M', strtotime($r['created_at'])) ?></small></td><td><?= h($r['customer_name']) ?></td>
+<?php foreach ($rows as $r): ?><tr<?= $view && $view['id'] == $r['id'] ? ' style="background:#FFF6EE"' : '' ?>><td><a href="?view=<?= $r['id'] ?>"><b><?= h($r['code']) ?></b></a><small><?= date('d M', strtotime($r['created_at'])) ?></small></td><td><?= h($r['customer_name']) ?></td>
 <td style="max-width:220px"><?= h(mb_strimwidth(str_replace("\n", ', ', $r['items']), 0, 60, '…')) ?><?= $r['attachment'] ? ' 📎' : '' ?></td><td><?= h($r['area']) ?></td><td><?= $r['sent'] ?> shops</td><td><b><?= $r['replied'] ?></b></td><td><?= status_badge($r['status']) ?></td></tr><?php endforeach; ?>
 </table></div></div>
 
@@ -46,7 +46,7 @@ page_header('Quote Requests, Leads & Reviews', 'quotes', 'Customer requirements 
 <?php if ($view['attachment']): ?><p><a target="_blank" href="<?= h(upload_url($view['attachment'])) ?>">📎 View uploaded list</a></p><?php endif; ?>
 <div class="vlist"><div><span>Mobile</span><b><?= h($view['customer_mobile']) ?></b></div><div><span>Area</span><b><?= h($view['area']) ?></b></div><div><span>Only verified</span><b><?= $view['verified_only'] ? 'Yes' : 'No' ?></b></div></div>
 <h3 style="margin-top:14px">Replies</h3>
-<?php foreach ($rec as $x): ?><div style="display:flex;justify-content:space-between;padding:7px 0;border-bottom:1px solid #F0F2F7;font-size:12.5px"><span><?= h($x['name']) ?> <?= $x['plan'] !== 'free' ? plan_badge($x['plan']) : '' ?></span><b><?= $x['replied_at'] ? '₹' . indian_number($x['reply_amount']) . ' · ' . h($x['delivery']) : '<span style="color:var(--mute);font-weight:400">awaiting</span>' ?></b></div><?php endforeach; ?>
+<?php foreach ($rec as $x): ?><div style="display:flex;justify-content:space-between;padding:7px 0;border-bottom:1px solid #F2EEEA;font-size:12.5px"><span><?= h($x['name']) ?></span><b><?= $x['replied_at'] ? '₹' . indian_number($x['reply_amount']) . ' · ' . h($x['delivery']) : '<span style="color:var(--mute);font-weight:400">awaiting</span>' ?></b></div><?php endforeach; ?>
 <form method="post" class="f" style="margin-top:10px"><?= csrf_field() ?><input type="hidden" name="id" value="<?= $view['id'] ?>">
 <label>Forward to another shop</label><div style="display:flex;gap:6px"><select name="shop_id"><?php foreach (all("SELECT id, name FROM shops WHERE status = 'verified' AND city_id <=> ? ORDER BY name", [$view['city_id']]) as $s): ?><option value="<?= $s['id'] ?>"><?= h($s['name']) ?></option><?php endforeach; ?></select><button class="btn" name="action" value="add_shop">Add</button></div>
 <?php if ($view['status'] !== 'closed'): ?><button class="btn r" style="margin-top:10px" name="action" value="close">Close request</button><?php endif; ?></form>

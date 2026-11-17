@@ -55,11 +55,11 @@ public class MainActivity extends AppCompatActivity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        getWindow().setStatusBarColor(Color.parseColor("#0B2559"));
-        getWindow().setNavigationBarColor(Color.parseColor("#0B2559"));
+        getWindow().setStatusBarColor(Color.parseColor("#121212"));
+        getWindow().setNavigationBarColor(Color.parseColor("#121212"));
 
         web = new WebView(this);
-        web.setBackgroundColor(Color.parseColor("#F2F5FA"));
+        web.setBackgroundColor(Color.parseColor("#F6F4F2"));
         setContentView(web);
 
         assetLoader = new WebViewAssetLoader.Builder()

@@ -27,5 +27,6 @@ define('APP_SECRET', env_or('APP_SECRET', 'change-this-to-a-long-random-string')
 define('APP_NAME', 'Electrical Hub');
 define('UPLOAD_DIR', env_or('UPLOAD_DIR', __DIR__ . '/uploads'));
 define('UPLOAD_URL', 'uploads');
+define('MAX_SHOP_PHOTOS', 10);   // photos allowed per shop
 
 date_default_timezone_set('Asia/Kolkata');

@@ -17,7 +17,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         'address' => post('address'), 'city_id' => (int)post('city_id') ?: null, 'area' => post('area'), 'pincode' => post('pincode'),
         'lat' => post('lat') !== '' ? (float)post('lat') : null, 'lng' => post('lng') !== '' ? (float)post('lng') : null,
         'open_time' => post('open_time', '09:00') ?: '09:00', 'close_time' => post('close_time', '21:00') ?: '21:00', 'weekly_off' => post('weekly_off') ?: null,
-        'status' => post('status', 'verified'), 'plan' => post('plan', 'free'), 'plan_expiry' => post('plan_expiry') ?: null,
+        'status' => post('status', 'verified'),
         'rating' => min(5, max(0, (float)post('rating'))),
     ];
     if ($s) {
@@ -34,7 +34,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     q("DELETE FROM shop_products WHERE shop_id = ?", [$id]);
     foreach ((array)post('products', []) as $pp) q("INSERT IGNORE INTO shop_products (shop_id, product_id) VALUES (?,?)", [$id, (int)$pp]);
     if (!empty($_FILES['photos']['name'][0])) {
-        foreach ($_FILES['photos']['name'] as $i => $nm) {
+        $room = MAX_SHOP_PHOTOS - (int)val("SELECT COUNT(*) FROM shop_photos WHERE shop_id = ?", [$id]);
+        if (count($_FILES['photos']['name']) > $room) flash('Only ' . max(0, $room) . ' more photo(s) allowed — max ' . MAX_SHOP_PHOTOS . ' per shop', 'err');
+        foreach (array_slice($_FILES['photos']['name'], 0, max(0, $room), true) as $i => $nm) {
             $file = ['name' => $nm, 'tmp_name' => $_FILES['photos']['tmp_name'][$i], 'error' => $_FILES['photos']['error'][$i], 'size' => $_FILES['photos']['size'][$i]];
             try { $path = save_upload($file, "shops/$id", ['jpg', 'jpeg', 'png', 'webp']); q("INSERT INTO shop_photos (shop_id, path, label, source) VALUES (?,?,?, 'admin')", [$id, $path, 'Photo']); }
             catch (Exception $e) { flash($e->getMessage(), 'err'); }
@@ -86,12 +88,10 @@ page_header($s ? 'Edit shop' : 'Add shop', 'shops', $s ? h($s['name']) : 'Create
   <div><label>Closes</label><input type="time" name="close_time" value="<?= $v('close_time', '21:00') ?>"></div>
   <div><label>Weekly off</label><select name="weekly_off"><option value="">None</option><?php foreach (['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'] as $d): ?><option <?= ($s['weekly_off'] ?? '') === $d ? 'selected' : '' ?>><?= $d ?></option><?php endforeach; ?></select></div></div>
 </div>
-<div class="card" style="margin-top:14px"><h3>Status & plan</h3>
+<div class="card" style="margin-top:14px"><h3>Status & photos</h3>
   <div class="fr"><div><label>Status</label><select name="status"><?php foreach (['verified', 'pending', 'rejected', 'blocked', 'draft'] as $st): ?><option value="<?= $st ?>" <?= ($s['status'] ?? 'verified') === $st ? 'selected' : '' ?>><?= ucfirst($st) ?></option><?php endforeach; ?></select></div>
   <div><label>Rating</label><input type="number" step="0.1" min="0" max="5" name="rating" value="<?= $v('rating', '0') ?>"></div></div>
-  <div class="fr"><div><label>Plan</label><select name="plan"><?php foreach (all("SELECT code, name FROM plans ORDER BY sort") as $pl): ?><option value="<?= $pl['code'] ?>" <?= ($s['plan'] ?? 'free') === $pl['code'] ? 'selected' : '' ?>><?= h($pl['name']) ?></option><?php endforeach; ?></select></div>
-  <div><label>Plan expiry</label><input type="date" name="plan_expiry" value="<?= $v('plan_expiry') ?>"></div></div>
-  <label>Add photos (admin upload)</label><input type="file" name="photos[]" accept="image/*" multiple>
+  <label>Add photos (admin upload · max <?= MAX_SHOP_PHOTOS ?> per shop)</label><input type="file" name="photos[]" accept="image/*" multiple>
 </div>
 </div>
 </div>

@@ -65,7 +65,7 @@ function shops_query($opts) {
             OR s.id IN (SELECT sp.shop_id FROM shop_products sp JOIN products pr ON pr.id = sp.product_id WHERE pr.name LIKE ?))";
         array_push($p, $like, $like, $like, $like, $like, $like);
     }
-    $planRank = "CASE s.plan WHEN 'premium' THEN 0 WHEN 'featured' THEN 1 ELSE 2 END";
+    $planRank = "0";
     $sort = $opts['sort'] ?? 'nearest';
     if ($sort === 'rating') $order = "s.rating DESC";
     elseif ($dist !== 'NULL') $order = "$planRank, distance";
@@ -206,8 +206,8 @@ try {
         $banners = all("SELECT b.id, b.title, b.subtitle, b.image, b.shop_id FROM banners b WHERE b.status = 'active'
             AND (b.city_id IS NULL OR b.city_id = ?) AND (b.end_date IS NULL OR b.end_date >= CURDATE()) ORDER BY b.sort, b.id", [$city]);
         foreach ($banners as &$b) $b['image'] = upload_url($b['image']);
-        [$featured] = shops_query(['city_id' => $city, 'lat' => $lat, 'lng' => $lng, 'featured' => 1, 'limit' => 10, 'plan_first' => 1, 'sort' => 'plan']);
-        [$nearby] = shops_query(['city_id' => $city, 'lat' => $lat, 'lng' => $lng, 'limit' => 10]);
+        $featured = [];
+        [$nearby] = shops_query(['city_id' => $city, 'lat' => $lat, 'lng' => $lng, 'limit' => 20]);
         out(['ok' => true, 'banners' => $banners,
             'categories' => all("SELECT id, name, icon, image FROM categories WHERE active = 1 AND parent_id IS NULL ORDER BY sort"),
             'featured' => $featured, 'nearby' => $nearby]);
@@ -276,7 +276,7 @@ try {
         q("UPDATE quote_requests SET code = ? WHERE id = ?", ['QR-' . (2000 + $qid), $qid]);
         $shopIds = array_map('intval', (array)in('shop_ids', []));
         if (!$shopIds) {
-            $order = ($lat && $lng) ? distance_sql($lat, $lng) : "CASE s.plan WHEN 'premium' THEN 0 WHEN 'featured' THEN 1 ELSE 2 END, s.rating DESC";
+            $order = ($lat && $lng) ? distance_sql($lat, $lng) : "s.rating DESC";
             $prio = "CASE s.plan WHEN 'premium' THEN 0 ELSE 1 END";
             $shopIds = array_column(all("SELECT s.id FROM shops s WHERE s.status = 'verified' AND s.city_id = ? ORDER BY $order LIMIT $count", [$city]), 'id');
         }
@@ -385,9 +385,9 @@ try {
         $s = my_shop($u);
         if (!$s) fail('Create your shop first');
         if (in('source', 'camera') !== 'camera') fail('Photos must be taken live with the camera');
-        $limit = (int)val("SELECT photos_limit FROM plans WHERE code = ?", [$s['plan']]) ?: 5;
+        $limit = MAX_SHOP_PHOTOS;
         $have = (int)val("SELECT COUNT(*) FROM shop_photos WHERE shop_id = ?", [$s['id']]);
-        if ($have >= $limit) fail("Your {$s['plan']} plan allows $limit photos. Delete old photos or upgrade.");
+        if ($have >= $limit) fail("Maximum $limit photos per shop. Delete an old photo to add a new one.");
         $path = save_upload($_FILES['photo'] ?? null, 'shops/' . $s['id'], ['jpg', 'jpeg', 'png', 'webp']);
         $lat = in('lat') !== null && in('lat') !== '' ? (float)in('lat') : null; $lng = in('lng') !== null && in('lng') !== '' ? (float)in('lng') : null;
         $dist = ($lat && $lng && $s['lat'] && $s['lng']) ? haversine_m($lat, $lng, (float)$s['lat'], (float)$s['lng']) : null;
@@ -446,7 +446,6 @@ try {
     case 'owner/offer/save':
         $u = auth_user(); $s = my_shop($u);
         if (!$s) fail('Create your shop first');
-        if ($s['plan'] === 'free') fail('Offers are available on Featured and Premium plans');
         $title = trim((string)in('title'));
         if ($title === '') fail('Offer title is required');
         q("INSERT INTO offers (shop_id, title, description, valid_till) VALUES (?,?,?,?)", [$s['id'], $title, trim((string)in('description')), in('valid_till') ?: null]);
@@ -462,6 +461,7 @@ try {
         out(['ok' => true, 'reviews' => $s ? all("SELECT customer_name, rating, body, DATE_FORMAT(created_at, '%d %b %Y') AS date FROM reviews WHERE shop_id = ? AND status = 'active' ORDER BY id DESC", [$s['id']]) : []]);
 
     case 'owner/upgrade':
+        fail('Paid plans are not available', 410);
         $u = auth_user(); $s = my_shop($u);
         if (!$s) fail('Create your shop first');
         $plan = one("SELECT * FROM plans WHERE code = ? AND active = 1", [in('plan')]);

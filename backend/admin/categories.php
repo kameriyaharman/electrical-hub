@@ -50,10 +50,10 @@ page_header('Categories & Brands', 'categories', 'Manage categories with images,
   <?php endforeach; ?></table></div>
 </div>
 
-<?php if ($viewBrand): $bn = val("SELECT name FROM brands WHERE id = ?", [$viewBrand]); $bs = all("SELECT s.id, s.name, s.area, c.name city, s.plan FROM shop_brands sb JOIN shops s ON s.id = sb.shop_id LEFT JOIN cities c ON c.id = s.city_id WHERE sb.brand_id = ? ORDER BY c.name, s.name", [$viewBrand]); ?>
+<?php if ($viewBrand): $bn = val("SELECT name FROM brands WHERE id = ?", [$viewBrand]); $bs = all("SELECT s.id, s.name, s.area, c.name city FROM shop_brands sb JOIN shops s ON s.id = sb.shop_id LEFT JOIN cities c ON c.id = s.city_id WHERE sb.brand_id = ? ORDER BY c.name, s.name", [$viewBrand]); ?>
 <div class="card" style="margin-top:14px" id="bs"><h3>Shops stocking <?= h($bn) ?> (<?= count($bs) ?>)</h3>
-<div class="tw"><table><tr><th>Shop</th><th>City / area</th><th>Plan</th></tr>
-<?php foreach ($bs as $s): ?><tr><td><a href="shops.php?view=<?= $s['id'] ?>"><?= h($s['name']) ?></a></td><td><?= h($s['city']) ?> · <?= h($s['area']) ?></td><td><?= plan_badge($s['plan']) ?></td></tr><?php endforeach; ?>
+<div class="tw"><table><tr><th>Shop</th><th>City / area</th></tr>
+<?php foreach ($bs as $s): ?><tr><td><a href="shops.php?view=<?= $s['id'] ?>"><?= h($s['name']) ?></a></td><td><?= h($s['city']) ?> · <?= h($s['area']) ?></td></tr><?php endforeach; ?>
 </table></div></div>
 <?php endif; ?>
 

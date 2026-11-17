@@ -49,7 +49,7 @@ function page_header($title, $active, $subtitle = '', $actions = '') {
     $nav = [
         'MAIN' => [['index.php', 'dashboard', 'Dashboard', 'grid'], ['shops.php', 'shops', 'Shops & Verification', 'store'],
             ['categories.php', 'categories', 'Categories & Brands', 'tag'], ['products.php', 'products', 'Products', 'box']],
-        'REVENUE' => [['plans.php', 'plans', 'Plans & Featured Ads', 'star'], ['banners.php', 'banners', 'Banners', 'image'], ['payments.php', 'payments', 'Payments', 'card']],
+        'PROMOTION' => [['banners.php', 'banners', 'Banners', 'image']],
         'USERS' => [['customers.php', 'customers', 'Customers', 'users'], ['quotes.php', 'quotes', 'Quote Requests', 'file'], ['reviews.php', 'reviews', 'Reviews', 'msg']],
         'SYSTEM' => [['cities.php', 'cities', 'Cities & Areas', 'pin'], ['settings.php', 'settings', 'Settings', 'cog']],
     ];

@@ -123,7 +123,7 @@ function shareShop(s) { lead(s.id, 'share'); shareText(s.name + ' — ' + (s.add
 function tags(s) {
   return '<div class="tags"><span class="t rt">' + (s.rating ? s.rating.toFixed(1) : 'New') + ' ★</span>' +
     (s.open ? '<span class="t op">Open</span>' : '<span class="t cl">Closed</span>') +
-    (s.plan === 'premium' ? '<span class="t pm">★ PREMIUM</span>' : s.featured ? '<span class="t ft">★ FEATURED</span>' : '') + '</div>';
+    (s.verified ? '<span class="t vf">✓ Verified</span>' : '') + '</div>';
 }
 function shopCard(s) {
   const ph = s.photo ? 'style="background-image:url(\'' + esc(s.photo) + '\')"' : '';
@@ -248,15 +248,14 @@ async function screenHome() {
   const loc = await getLocation();
   try {
     const d = await api('home', { params: { city_id: cityId(), lat: loc && loc.lat, lng: loc && loc.lng } });
-    bindCards(d.featured); bindCards(d.nearby);
+    bindCards(d.nearby);
     const banners = d.banners.length ? d.banners : [{ title: 'All Electrical Products in One Place' }];
     let h = '<div class="banners">' + banners.map((b, i) => '<div class="bnr" ' + (b.image ? 'style="background-image:url(\'' + esc(b.image) + '\')"' : '') + (b.shop_id ? ' data-shop="' + b.shop_id + '"' : '') + '>' +
       (b.image ? '' : '<b>' + (i === 0 ? esc(b.title).replace(/in One Place/i, '<em>in One Place</em>') : esc(b.title)) + '</b>' + (b.subtitle ? '<small>' + esc(b.subtitle) + '</small>' : '') + '<span class="art">' + (i % 2 ? '💡' : '🔌') + '</span>') + '</div>').join('') + '</div>';
     h += '<div class="sec"><h3>Categories</h3></div><div class="cats">' + d.categories.map(c => '<div class="cat" data-href="#/shops?category_id=' + c.id + '&cname=' + encodeURIComponent(c.name) + '"><div class="em">' + (c.image ? '<img src="' + esc(c.image) + '">' : esc(c.icon || emojiFor(c.name))) + '</div>' + esc(c.name) + '</div>').join('') + '</div>';
-    if (d.featured.length) h += '<div class="sec"><h3>Featured shops near you</h3><a href="#/shops">View all</a></div>' + d.featured.map(shopCard).join('');
-    const rest = d.nearby.filter(s => !d.featured.find(f => f.id === s.id));
-    if (rest.length) h += '<div class="sec"><h3>' + (loc ? 'Nearest to you' : 'More shops') + '</h3><a href="#/map">Map view</a></div>' + rest.map(shopCard).join('');
-    if (!d.featured.length && !rest.length) h += '<div class="empty"><div class="big">🏪</div>No shops listed in this city yet.<br><a href="#" id="chg2" style="color:var(--blue)">Change city</a></div>';
+    const rest = d.nearby;
+    if (rest.length) h += '<div class="sec"><h3>' + (loc ? 'Shops near you' : 'Shops in your city') + '</h3><a href="#/shops">View all</a></div>' + rest.map(shopCard).join('');
+    if (!rest.length) h += '<div class="empty"><div class="big">🏪</div>No shops listed in this city yet.<br><a href="#" id="chg2" style="color:var(--blue)">Change city</a></div>';
     h += '<div class="own" data-href="#/owner">' + icon('store') + '<div><b>Own an electrical shop?</b><small>Get listed free & get customer calls</small></div></div>';
     document.getElementById('body').innerHTML = h;
     const c2 = document.getElementById('chg2'); if (c2) c2.onclick = e => { e.preventDefault(); pickCity(); };
@@ -318,7 +317,7 @@ async function screenMap() {
     const pts = [];
     d.shops.filter(s => s.lat).forEach(s => {
       pts.push([s.lat, s.lng]);
-      L.marker([s.lat, s.lng], { icon: L.divIcon({ className: '', html: '<div class="pin ' + (s.featured ? 'f' : '') + '"></div>', iconSize: [30, 30], iconAnchor: [15, 30] }) })
+      L.marker([s.lat, s.lng], { icon: L.divIcon({ className: '', html: '<div class="pin"></div>', iconSize: [30, 30], iconAnchor: [15, 30] }) })
         .addTo(map).on('click', () => { document.getElementById('mc').innerHTML = shopCard(s); });
     });
     if (pts.length && !loc) map.fitBounds(pts, { padding: [40, 40], maxZoom: 14 });
@@ -341,7 +340,7 @@ async function screenShop(id) {
     '<div class="tb"><button data-act="back">' + icon('back') + '</button><button class="sv ' + (s.saved ? 'on' : '') + '" id="save">' + icon('heart') + '</button></div>' +
     (s.photos.length ? '<div class="live"><i></i>LIVE PHOTOS · updated ' + esc(s.photos_updated) + '</div>' : '') + '</div>' +
     '<div class="sp"><h2>' + esc(s.name) + (s.verified ? icon('vcheck') : '') + '</h2><div class="muted" style="margin:3px 0 8px">' + esc(s.address || s.area) + dist + '</div>' +
-    '<div class="tags"><span class="t rt">' + (s.rating ? s.rating.toFixed(1) : 'New') + ' ★</span><span class="muted">(' + s.review_count + ' reviews)</span>' + (s.open ? '<span class="t op">Open</span><span class="muted">till ' + esc(s.close_time) + '</span>' : '<span class="t cl">Closed</span><span class="muted">opens ' + esc(s.open_time) + '</span>') + (s.featured ? '<span class="t ft">★ ' + esc(s.plan.toUpperCase()) + '</span>' : '') + '</div>' +
+    '<div class="tags"><span class="t rt">' + (s.rating ? s.rating.toFixed(1) : 'New') + ' ★</span><span class="muted">(' + s.review_count + ' reviews)</span>' + (s.open ? '<span class="t op">Open</span><span class="muted">till ' + esc(s.close_time) + '</span>' : '<span class="t cl">Closed</span><span class="muted">opens ' + esc(s.open_time) + '</span>') + '' + '</div>' +
     '<div class="acts"><button id="a1"><span class="cb call">' + icon('phone') + '</span>Call</button><button id="a2"><span class="cb wa">' + icon('wa') + '</span>WhatsApp</button><button id="a3"><span class="cb dir">' + icon('nav') + '</span>Directions</button><button id="a4"><span class="cb sh">' + icon('share') + '</span>Share</button></div></div>' +
     '<div class="sp" style="margin-top:8px">' +
     (s.photos.length ? '<div class="h5" style="margin-top:0">Shop photos</div><div class="thumbs">' + thumbs + '</div>' : '') +
@@ -351,7 +350,7 @@ async function screenShop(id) {
     (s.products.length ? '<div class="h5">Products</div>' + s.products.map(p => '<div class="prod"><div class="pi">' + emojiFor(p.name) + '</div><div><b>' + esc(p.name) + '</b><span class="pr">' + (p.price ? inr(p.price) : inr(p.min_price) + ' – ' + inr(p.max_price)) + '</span></div></div>').join('') : '') +
     '<div class="h5">Shop details</div><div class="muted" style="line-height:1.8">' + icon('clock', '') + ' ' + esc(s.open_time) + ' – ' + esc(s.close_time) + (s.weekly_off ? ' · ' + esc(s.weekly_off) + ' closed' : '') + '<br>Type: ' + esc(s.shop_type) + (s.is_service ? ' + electrician service' : '') + (s.gstin ? '<br>GSTIN: ' + esc(s.gstin) : '') + '</div>' +
     '<div class="h5" style="display:flex;justify-content:space-between">Reviews <a href="#" id="wr" style="color:var(--blue);font-size:12.5px">Write a review</a></div>' +
-    (s.reviews.length ? s.reviews.map(r => '<div class="rev"><b>' + esc(r.customer_name) + '</b> <span class="stars">' + '★'.repeat(r.rating) + '</span><span style="color:#d7dce8">' + '★'.repeat(5 - r.rating) + '</span><div class="muted">' + esc(r.date) + '</div><div>' + esc(r.body || '') + '</div></div>').join('') : '<div class="muted">No reviews yet — be the first.</div>') +
+    (s.reviews.length ? s.reviews.map(r => '<div class="rev"><b>' + esc(r.customer_name) + '</b> <span class="stars">' + '★'.repeat(r.rating) + '</span><span style="color:#E0DAD4">' + '★'.repeat(5 - r.rating) + '</span><div class="muted">' + esc(r.date) + '</div><div>' + esc(r.body || '') + '</div></div>').join('') : '<div class="muted">No reviews yet — be the first.</div>') +
     '<div class="cta" style="margin-top:16px" data-href="#/quote?shop=' + s.id + '"><b>Need many items?</b><span>Send your list to this and nearby shops — get quotes</span></div></div></div>' +
     '<div class="foot"><button class="btn" id="b1">' + icon('phone') + ' Call</button><button class="btn wa" id="b2">' + icon('wa') + ' WhatsApp</button></div>');
   const call = () => callShop(s), wa = () => waShop(s);
@@ -530,8 +529,8 @@ async function screenOwner() {
     : '<span class="pill" style="background:#eee;color:#555">Incomplete</span>';
   const q = d.quotes.find(x => !x.replied_at);
   render('<div class="scr nonav"><div class="dash-hd"><div style="display:flex;align-items:center;justify-content:space-between"><div class="brand"><span class="bolt">' + BOLT + '</span>Electrical <b>Hub</b></div>' +
-    (s.plan !== 'free' ? '<span class="pill" style="background:var(--yellow);color:var(--navy)">' + esc(s.plan.toUpperCase()) + '</span>' : '<button class="btn sm y" data-href="#/owner/plans">Upgrade</button>') + '</div>' +
-    '<h2>' + esc(s.name) + '</h2>' + statusPill + (s.plan_expiry ? '<div style="font-size:11.5px;opacity:.75;margin-top:6px">Plan valid till ' + esc(s.plan_expiry) + '</div>' : '') + '</div>' +
+    '</div>' +
+    '<h2>' + esc(s.name) + '</h2>' + statusPill + '</div>' +
     (s.status === 'rejected' ? '<div class="wrap"><div class="note">Admin asked for changes: <b>' + esc(s.reject_reason || '') + '</b>. Fix it and tap <b>Submit again</b>.<br><button class="btn sm" id="resub" style="margin-top:8px">Submit again</button></div></div>' : '') +
     '<div class="stats"><div class="stat"><small>Profile views</small><b>' + st.views.toLocaleString('en-IN') + '</b><em>' + (st.views_change >= 0 ? '▲ ' : '▼ ') + Math.abs(st.views_change) + '% this week</em></div>' +
     '<div class="stat"><small>Calls</small><b>' + st.calls + '</b><em>this month</em></div><div class="stat"><small>WhatsApp clicks</small><b>' + st.whatsapp + '</b><em>this month</em></div>' +
@@ -540,7 +539,7 @@ async function screenOwner() {
       '<div style="display:flex;gap:8px;margin-top:10px"><button class="btn sm" style="flex:1" id="sp">Send price</button><button class="btn sm wa" style="flex:1" id="sw">WhatsApp</button></div></div></div>' : '<div style="height:14px"></div>') +
     '<div class="menu">' + li('camera', 'Update live photos', st.photos, '#/owner/photos') + li('tag', 'Post an offer', '', '#/owner/offers') + li('grid', 'Products & brands', '', '#/owner/edit?step=3') +
     li('clock', 'Shop timings', '', '#/owner/edit?step=4') + li('store', 'Shop details & location', '', '#/owner/edit?step=2') + li('star', 'Reviews (' + st.reviews + ')', '', '#/owner/reviews') + li('file', 'All quote requests', '', '#/owner/quotes') +
-    li('crown', 'Plans — Featured / Premium', s.plan, '#/owner/plans') + li('search', 'Browse as customer', '', '#/home') + '</div></div>');
+    li('search', 'Browse as customer', '', '#/home') + '</div></div>');
   bindAccount();
   if (q) { document.getElementById('sp').onclick = () => replySheet(q); document.getElementById('sw').onclick = () => openExt('https://wa.me/91' + q.customer_mobile + '?text=' + encodeURIComponent('Hi ' + (q.customer_name || '') + ', this is ' + s.name + ' from Electrical Hub regarding your requirement ' + q.code + ': ')); }
   const rs = document.getElementById('resub'); if (rs) rs.onclick = async () => { try { await api('owner/submit', { body: {} }); toast('Sent for verification'); route(); } catch (e) { toast(e.message); } };
@@ -652,11 +651,12 @@ async function screenOwnerPhotos() {
   const next = REQUIRED.find(r => !have.has(r)) || 'More';
   render('<div class="scr nonav">' + hd('Live shop photos') + '<div class="wrap"><div class="note">📸 Photos must be clicked live from the shop (camera only, no gallery) — shows customers your real shop. GPS & time stamp added.</div>' +
     '<div class="pgrid">' + ph.map(x => '<div class="p" style="background-image:url(\'' + esc(x.url) + '\')"><span>' + esc(x.label || '') + ' · ' + esc(x.taken_at) + '</span><button data-del="' + x.id + '">×</button></div>').join('') +
-    '<label class="p take">' + icon('camera') + 'Take photo<small class="muted" style="font-weight:400">' + esc(next) + '</small><input type="file" id="cam" accept="image/*" capture="environment" hidden></label></div>' +
+    (ph.length < 10 ? '<label class="p take">' + icon('camera') + 'Take photo<small class="muted" style="font-weight:400">' + esc(next) + ' · ' + ph.length + '/10</small><input type="file" id="cam" accept="image/*" capture="environment" hidden></label>' : '') + '</div>' +
+    (ph.length >= 10 ? '<p class="muted">10/10 photos — delete an old photo to add a new one.</p>' : '') +
     '<div class="h5">Required</div><div class="req">' + REQUIRED.map(r => '<div class="' + (have.has(r) ? 'done' : '') + '">' + icon('check') + r + '</div>').join('') + '</div></div>' +
     '<div class="foot"><button class="btn" id="sub">' + (OWNER.status === 'verified' ? 'Done' : 'Submit for verification') + '</button></div></div>');
   getLocation(true);
-  document.getElementById('cam').onchange = async e => {
+  if (document.getElementById('cam')) document.getElementById('cam').onchange = async e => {
     const f = e.target.files[0]; if (!f) return;
     toast('Adding GPS & time stamp…', 6000);
     const loc = await getLocation(true);
@@ -686,8 +686,8 @@ function stampPhoto(file, loc, label) {
       const c = document.createElement('canvas'); c.width = w; c.height = h;
       const x = c.getContext('2d'); x.drawImage(img, 0, 0, w, h);
       const fs = Math.max(14, Math.round(w / 45)), bar = fs * 2.6;
-      x.fillStyle = 'rgba(11,37,89,.72)'; x.fillRect(0, h - bar, w, bar);
-      x.fillStyle = '#FFC629'; x.font = '600 ' + fs + 'px sans-serif';
+      x.fillStyle = 'rgba(18,18,18,.72)'; x.fillRect(0, h - bar, w, bar);
+      x.fillStyle = '#FF7A00'; x.font = '600 ' + fs + 'px sans-serif';
       const d = new Date(), ts = d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) + ' ' + d.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
       x.fillText('⚡ Electrical Hub · ' + label, fs * .8, h - bar + fs * 1.15);
       x.fillStyle = '#fff'; x.font = fs * .85 + 'px sans-serif';
@@ -706,7 +706,7 @@ async function screenOwnerOffers() {
   render('<div class="scr nonav">' + hd('Offers') + '<div class="wrap" id="oo">' + loading() + '</div></div>');
   await loadOwner();
   const d = await api('owner/offers');
-  const locked = OWNER.plan === 'free';
+  const locked = false;
   document.getElementById('oo').innerHTML = (locked ? '<div class="note">Offers are shown on Featured & Premium plans. <a href="#/owner/plans" style="color:var(--blue);font-weight:600">Upgrade →</a></div>' :
     '<label class="l" style="margin-top:0">Offer title</label><input class="inp" id="ot" placeholder="Havells Week — 15% off MCBs"><label class="l">Details</label><textarea class="inp" id="od"></textarea><label class="l">Valid till</label><input class="inp" type="date" id="ov"><button class="btn blk" id="os" style="margin-top:12px">Post offer</button>') +
     '<div class="h5">Your offers</div>' + (d.offers.length ? d.offers.map(o => '<div class="offer"><div style="display:flex;justify-content:space-between"><b>' + esc(o.title) + '</b><a href="#" data-od="' + o.id + '" style="color:var(--red)">Delete</a></div><div class="muted">' + esc(o.description || '') + (o.valid_till ? ' · till ' + esc(o.valid_till) : '') + '</div></div>').join('') : '<div class="muted">No offers yet</div>');
@@ -778,7 +778,7 @@ function route() {
         if (!b) return screenOwner();
         if (b === 'edit') return screenOwnerEdit(params);
         if (b === 'photos') return screenOwnerPhotos();
-        if (b === 'plans') return screenOwnerPlans();
+        if (b === 'plans') return screenOwner();
         if (b === 'offers') return screenOwnerOffers();
         if (b === 'reviews') return screenOwnerReviews();
         if (b === 'quotes') return screenOwnerQuotes();

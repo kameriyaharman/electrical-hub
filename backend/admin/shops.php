@@ -90,7 +90,7 @@ function read_xlsx($path) {
 $tab = get('tab', 'all');
 $qq = get('q'); $city = (int)get('city');
 $where = ['1=1']; $p = [];
-$tabs = ['all' => "s.status <> 'draft'", 'pending' => "s.status = 'pending'", 'verified' => "s.status = 'verified'", 'rejected' => "s.status = 'rejected'", 'paid' => "s.plan <> 'free'", 'blocked' => "s.status = 'blocked'", 'draft' => "s.status = 'draft'"];
+$tabs = ['all' => "s.status <> 'draft'", 'pending' => "s.status = 'pending'", 'verified' => "s.status = 'verified'", 'rejected' => "s.status = 'rejected'", 'blocked' => "s.status = 'blocked'", 'draft' => "s.status = 'draft'"];
 $where[] = $tabs[$tab] ?? $tabs['all'];
 if ($qq !== '') { $where[] = '(s.name LIKE ? OR s.owner_name LIKE ? OR s.mobile LIKE ? OR s.area LIKE ? OR c.name LIKE ?)'; array_push($p, "%$qq%", "%$qq%", "%$qq%", "%$qq%", "%$qq%"); }
 if ($city) { $where[] = 's.city_id = ?'; $p[] = $city; }
@@ -108,7 +108,7 @@ $actions = '<a class="btn" href="#" data-open="importModal">Import shops (Excel)
 page_header('Shops & Verification', 'shops', 'Every shop listing — live-photo check, GPS match, duplicate check, approve / reject, edit, block', $actions);
 ?>
 <div class="tabs">
-<?php foreach (['all' => 'All', 'pending' => 'Pending', 'verified' => 'Verified', 'rejected' => 'Rejected', 'paid' => 'Paid', 'blocked' => 'Blocked', 'draft' => 'Incomplete'] as $k => $lbl):
+<?php foreach (['all' => 'All', 'pending' => 'Pending', 'verified' => 'Verified', 'rejected' => 'Rejected', 'blocked' => 'Blocked', 'draft' => 'Incomplete'] as $k => $lbl):
     if (in_array($k, ['blocked', 'draft']) && !$counts[$k]) continue; ?>
   <a class="<?= $tab === $k ? 'on' : '' ?>" href="?tab=<?= $k ?>"><?= $lbl ?><span><?= indian_number($counts[$k]) ?></span></a>
 <?php endforeach; ?>
@@ -121,16 +121,15 @@ page_header('Shops & Verification', 'shops', 'Every shop listing — live-photo 
 
 <div class="<?= $v ? 'split' : '' ?>">
 <div class="card" style="padding:6px 8px"><div class="tw"><table>
-<tr><th>Shop</th><th>Owner</th><th>City / area</th><th>Type</th><th>Photos</th><th>Plan</th><th>Status</th><th>Action</th></tr>
-<?php if (!$rows): ?><tr><td colspan="8" class="empty">No shops found</td></tr><?php endif; ?>
+<tr><th>Shop</th><th>Owner</th><th>City / area</th><th>Type</th><th>Photos</th><th>Status</th><th>Action</th></tr>
+<?php if (!$rows): ?><tr><td colspan="7" class="empty">No shops found</td></tr><?php endif; ?>
 <?php foreach ($rows as $s): ?>
-<tr<?= $v && $v['id'] == $s['id'] ? ' style="background:#F6F9FF"' : '' ?>>
+<tr<?= $v && $v['id'] == $s['id'] ? ' style="background:#FFF6EE"' : '' ?>>
   <td><b><?= h($s['name']) ?></b><small><?= h($s['mobile']) ?></small></td>
   <td><?= h($s['owner_name']) ?></td>
   <td><?= h($s['city']) ?><small><?= h($s['area']) ?></small></td>
   <td><?= h($s['shop_type']) ?></td>
-  <td><?= $s['photos'] ? $s['photos'] . ' live' : '<span class="bad">0</span>' ?></td>
-  <td><?= plan_badge($s['plan']) ?></td>
+  <td><?= $s['photos'] ? $s['photos'] . '/' . MAX_SHOP_PHOTOS : '<span class="bad">0</span>' ?></td>
   <td><?= status_badge($s['status']) ?><?php if ($s['status'] === 'rejected' && $s['reject_reason']): ?><small><?= h($s['reject_reason']) ?></small><?php endif; ?></td>
   <td style="white-space:nowrap">
     <?php if ($s['status'] === 'pending'): ?><a class="btn sm p" href="?<?= h(http_build_query(['tab' => $tab, 'view' => $s['id']])) ?>">Verify</a>
@@ -171,7 +170,6 @@ page_header('Shops & Verification', 'shops', 'Every shop listing — live-photo 
     <div><span>Categories</span><b style="text-align:right"><?= h(implode(', ', array_column($cats, 'name')) ?: '—') ?></b></div>
     <div><span>Brands</span><b style="text-align:right"><?= h(implode(', ', array_column($brs, 'name')) ?: '—') ?></b></div>
     <div><span>Location</span><b><?php if ($v['lat']): ?><a target="_blank" href="https://maps.google.com/?q=<?= $v['lat'] ?>,<?= $v['lng'] ?>">Open map ↗</a><?php else: ?>—<?php endif; ?></b></div>
-    <div><span>Plan</span><b><?= plan_badge($v['plan']) ?><?= $v['plan_expiry'] ? ' till ' . date('d M', strtotime($v['plan_expiry'])) : '' ?></b></div>
     <div><span>Views · Calls · WhatsApp</span><b><?= $v['views'] ?> · <?= $v['calls'] ?> · <?= $v['whatsapp_clicks'] ?></b></div>
   </div>
   <div style="display:flex;gap:8px;margin-top:14px;flex-wrap:wrap">
