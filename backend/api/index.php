@@ -98,6 +98,9 @@ function notif_where($u) {
     return "(n.user_id = $uid OR (n.user_id IS NULL AND (n.city_id IS NULL OR n.city_id = $city) AND n.audience IN ('all','$role')))";
 }
 
+/** Turn stored upload paths into full URLs for a list of rows. */
+function with_urls($rows, $field) { foreach ($rows as &$r) $r[$field] = upload_url($r[$field]); return $rows; }
+
 function my_shop($u) { return one("SELECT s.*, c.name AS city_name FROM shops s LEFT JOIN cities c ON c.id = s.city_id WHERE s.owner_user_id = ? ORDER BY s.id LIMIT 1", [$u['id']]); }
 
 function shop_full($s, $u = null) {
@@ -199,7 +202,7 @@ try {
     case 'meta':
         out(['ok' => true,
             'cities' => all("SELECT id, name, state, lat, lng FROM cities WHERE active = 1 ORDER BY name"),
-            'categories' => all("SELECT id, name, icon, image FROM categories WHERE active = 1 AND parent_id IS NULL ORDER BY sort, name"),
+            'categories' => with_urls(all("SELECT id, name, icon, image FROM categories WHERE active = 1 AND parent_id IS NULL ORDER BY sort, name"), 'image'),
             'brands' => all("SELECT id, name FROM brands WHERE active = 1 ORDER BY name"),
             'plans' => array_map(fn($p) => $p + ['feature_list' => array_values(array_filter(explode("\n", (string)$p['features'])))],
                 all("SELECT code, name, tagline, price, duration_days, photos_limit, search_position, home_banner, quote_priority, features FROM plans WHERE active = 1 ORDER BY sort")),
@@ -223,7 +226,7 @@ try {
         $featured = [];
         [$nearby] = shops_query(['city_id' => $city, 'lat' => $lat, 'lng' => $lng, 'limit' => 20]);
         out(['ok' => true, 'banners' => $banners,
-            'categories' => all("SELECT id, name, icon, image FROM categories WHERE active = 1 AND parent_id IS NULL ORDER BY sort"),
+            'categories' => with_urls(all("SELECT id, name, icon, image FROM categories WHERE active = 1 AND parent_id IS NULL ORDER BY sort"), 'image'),
             'featured' => $featured, 'nearby' => $nearby]);
 
     case 'shops':
