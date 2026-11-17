@@ -18,8 +18,45 @@ const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&a
 const inr = n => '₹' + Number(n || 0).toLocaleString('en-IN');
 const qs = o => Object.entries(o).filter(([, v]) => v !== undefined && v !== null && v !== '' && v !== false).map(([k, v]) => encodeURIComponent(k) + '=' + encodeURIComponent(v)).join('&');
 function toast(msg, ms) { const t = document.getElementById('toast'); t.textContent = msg; t.classList.add('show'); clearTimeout(t._h); t._h = setTimeout(() => t.classList.remove('show'), ms || 2600); }
-function go(h) { if (location.hash === h) route(); else location.hash = h; }
-function back() { if (history.length > 1) history.back(); else go('#/home'); }
+// ---------- navigation: our own screen stack (reliable Android back button) ----------
+const TABS = ['#/home', '#/shops', '#/products', '#/offers', '#/account'];
+const NAV = { stack: [], mode: null };
+try { NAV.stack = JSON.parse(sessionStorage.getItem('eh_nav') || '[]'); } catch (e) {}
+function saveNav() { try { sessionStorage.setItem('eh_nav', JSON.stringify(NAV.stack.slice(-40))); } catch (e) {} }
+function curHash() { return location.hash || '#/home'; }
+function track(h) {
+  const st = NAV.stack, mode = NAV.mode; NAV.mode = null;
+  if (mode === 'back') { /* stack already adjusted */ }
+  else if (TABS.includes(h)) NAV.stack = h === '#/home' ? ['#/home'] : ['#/home', h];
+  else if (mode === 'replace' && st.length) st[st.length - 1] = h;
+  else if (st[st.length - 1] === h) { /* same screen */ }
+  else if (st.length > 1 && st[st.length - 2] === h) st.pop();   // browser/system history back
+  else st.push(h);
+  saveNav();
+}
+function setHash(h, replace) {
+  if (curHash() === h) { route(); return; }
+  if (replace) location.replace(h); else location.hash = h;
+}
+/** go(h) opens a new screen; go(h, true) swaps the current screen (redirects, filter changes). */
+function go(h, replace) { NAV.mode = replace ? 'replace' : null; setHash(h, replace); }
+/** Return to a screen already in the stack (e.g. back to the owner dashboard after saving). */
+function goBackTo(h) {
+  const i = NAV.stack.lastIndexOf(h);
+  if (i >= 0 && i < NAV.stack.length - 1) { NAV.stack.length = i + 1; NAV.mode = 'back'; saveNav(); setHash(h, true); }
+  else go(h, true);
+}
+/** Back: closes a sheet, else previous screen, else home; returns false only when the app should close. */
+function navBack() {
+  const sh = document.getElementById('sheet');
+  if (sh.classList.contains('show')) { closeSheet(); return true; }
+  if (NAV.stack.length > 1) { NAV.stack.pop(); NAV.mode = 'back'; saveNav(); setHash(NAV.stack[NAV.stack.length - 1], true); return true; }
+  const h = curHash();
+  if (h === '#/home' && S.token && S.role === 'owner') { go('#/owner', true); NAV.stack = ['#/owner']; saveNav(); return true; }
+  if (h === '#/home' || h === '#/login' || (h === '#/owner' && S.role === 'owner')) return false;
+  go('#/home', true); return true;
+}
+function back() { if (!navBack()) go('#/home', true); }
 
 async function api(route, opts = {}) {
   const params = opts.params ? '&' + qs(opts.params) : '';
@@ -218,7 +255,7 @@ function screenLogin() {
       S.token = r.token; S.user = r.user; S.role = role;
       store.set('token', r.token); store.set('user', r.user); store.set('role', role);
       if (!S.city) { const m = await meta(); const c = m.cities.find(x => x.id == r.user.city_id); if (c) setCity(c); }
-      go(role === 'owner' ? '#/owner' : '#/home');
+      if (role === 'owner') { NAV.stack = ['#/home']; go('#/owner', true); } else go('#/home', true);
     } catch (e) { toast(e.message); }
   }
   draw();
@@ -226,12 +263,12 @@ function screenLogin() {
 function logout(silent) {
   if (!silent && S.token) api('auth/logout', { body: {} }).catch(() => {});
   S.token = ''; S.user = null; store.del('token'); store.del('user');
-  go('#/login');
+  NAV.stack = []; go('#/login', true);
 }
 function needLogin(msg) {
   if (S.token) return false;
   toast(msg || 'Please login with your mobile number');
-  go('#/login'); return true;
+  go('#/login', true); return true;
 }
 
 // ---------- Home ----------
@@ -280,7 +317,7 @@ async function screenShops(p) {
   document.querySelectorAll('.chip[data-k]').forEach(b => b.onclick = () => {
     const np = Object.assign({}, p, { [b.dataset.k]: b.dataset.v });
     if (b.dataset.k === 'category_id') { delete np.cname; const c = m.categories.find(x => x.id == b.dataset.v); if (c) np.cname = c.name; }
-    go('#/shops?' + qs(np));
+    go('#/shops?' + qs(np), true);
   });
   document.getElementById('flt').onclick = () => {
     const box = sheet('<h3>Filter shops</h3><label class="l">Search</label><input class="inp" id="fq" value="' + esc(f.q) + '" placeholder="Shop, product or brand">' +
@@ -288,8 +325,8 @@ async function screenShops(p) {
       '<label class="l">Shop type</label><select class="inp" id="ft"><option value="">Any</option><option' + (f.shop_type === 'Retail' ? ' selected' : '') + '>Retail</option><option' + (f.shop_type === 'Wholesale' ? ' selected' : '') + '>Wholesale</option></select>' +
       '<label class="l">Sort by</label><select class="inp" id="fs"><option value="nearest">Nearest</option><option value="rating"' + (f.sort === 'rating' ? ' selected' : '') + '>Top rated</option></select>' +
       '<div style="display:flex;gap:10px;margin-top:16px"><button class="btn o" id="fr" style="flex:1">Clear</button><button class="btn" id="fa" style="flex:2">Apply</button></div>');
-    box.querySelector('#fr').onclick = () => { closeSheet(); go('#/shops'); };
-    box.querySelector('#fa').onclick = () => { closeSheet(); go('#/shops?' + qs(Object.assign({}, p, { q: box.querySelector('#fq').value.trim(), brand_id: box.querySelector('#fb').value, shop_type: box.querySelector('#ft').value, sort: box.querySelector('#fs').value }))); };
+    box.querySelector('#fr').onclick = () => { closeSheet(); go('#/shops', true); };
+    box.querySelector('#fa').onclick = () => { closeSheet(); go('#/shops?' + qs(Object.assign({}, p, { q: box.querySelector('#fq').value.trim(), brand_id: box.querySelector('#fb').value, shop_type: box.querySelector('#ft').value, sort: box.querySelector('#fs').value })), true); };
   };
   const loc = await getLocation();
   try {
@@ -381,7 +418,7 @@ async function screenProducts(p) {
   render('<div class="scr">' + hd('Products', { right: '<button class="r" id="ps">' + icon('search') + '</button>' }) +
     '<div class="wrap" style="padding-bottom:0"><div class="chips"><button class="chip ' + (!p.category_id ? 'on' : '') + '" data-c="">All</button>' + m.categories.map(c => '<button class="chip ' + (p.category_id == c.id ? 'on' : '') + '" data-c="' + c.id + '">' + esc(c.name.replace(/ \(.*\)| &.*/, '')) + '</button>').join('') + '</div>' +
     (p.q ? '<p class="muted">Results for “' + esc(p.q) + '” · <a href="#/products" style="color:var(--blue)">clear</a></p>' : '') + '</div><div class="wrap" id="pl">' + loading() + '</div></div>' + bottomNav('Products'));
-  document.querySelectorAll('[data-c]').forEach(b => b.onclick = () => go('#/products?' + qs({ category_id: b.dataset.c })));
+  document.querySelectorAll('[data-c]').forEach(b => b.onclick = () => go('#/products?' + qs({ category_id: b.dataset.c }), true));
   document.getElementById('ps').onclick = () => { const box = sheet('<h3>Search products</h3><input class="inp" id="pq" placeholder="e.g. 1.5 sq mm wire, Havells MCB"><button class="btn blk" id="pgo" style="margin-top:12px">Search</button>'); const i = box.querySelector('#pq'); i.focus(); box.querySelector('#pgo').onclick = () => { closeSheet(); go('#/products?' + qs({ q: i.value.trim() })); }; };
   try {
     const d = await api('products', { params: { category_id: p.category_id, q: p.q, city_id: cityId() } });
@@ -427,7 +464,7 @@ async function screenQuote(p) {
     if (p.shop) fd.append('include_shop', p.shop);
     if (file) fd.append('file', file);
     const b = document.getElementById('send'); b.disabled = true; b.textContent = 'Sending…';
-    try { const r = await api('quotes/create', { form: fd }); toast('Sent to ' + r.sent_to + ' shops. Replies will appear here.'); go('#/quote/' + r.quote_id); }
+    try { const r = await api('quotes/create', { form: fd }); toast('Sent to ' + r.sent_to + ' shops. Replies will appear here.'); go('#/quote/' + r.quote_id, true); }
     catch (e) { toast(e.message); b.disabled = false; b.textContent = 'Send requirement'; }
   };
 }
@@ -518,8 +555,8 @@ async function screenOwner() {
   if (needLogin('Login with your shop mobile number')) return;
   render('<div class="scr nonav">' + loading() + '</div>');
   try { await loadOwner(); } catch (e) { render('<div class="scr">' + hd('My shop') + '<div class="empty">' + esc(e.message) + '</div></div>'); return; }
-  if (!OWNER) return go('#/owner/edit?step=2');
-  if (OWNER.status === 'draft' || (OWNER.status === 'rejected')) { if (!OWNER.photos.length) return go('#/owner/photos'); }
+  if (!OWNER) return go('#/owner/edit?step=2', true);
+  if (OWNER.status === 'draft' || (OWNER.status === 'rejected')) { if (!OWNER.photos.length) return go('#/owner/photos', true); }
   const d = await api('owner/dashboard');
   const s = d.shop, st = d.stats;
   const statusPill = s.status === 'verified' ? '<span class="pill" style="background:#E3F6EA;color:#0E7B3C">Verified</span> <span style="opacity:.8;font-size:12px">· listing live</span>'
@@ -622,7 +659,7 @@ async function screenOwnerEdit(p) {
     if (step === 4) ['area', 'address', 'pincode', 'open_time', 'close_time', 'weekly_off', 'city_id'].forEach(k => { const v = document.getElementById(k).value.trim(); if (k === 'open_time' || k === 'close_time') D[k + '_24'] = v; else D[k] = v; });
     saveDraft();
   };
-  const pb = document.getElementById('prev'); if (pb) pb.onclick = () => { collect(); go('#/owner/edit?step=' + (step - 1)); };
+  const pb = document.getElementById('prev'); if (pb) pb.onclick = () => { collect(); if (!navBack()) go('#/owner/edit?step=' + (step - 1), true); };
   document.getElementById('next').onclick = async () => {
     collect();
     if (step === 2) { if (!D.name) return toast('Enter shop name'); if (!/^\d{10}$/.test(D.mobile)) return toast('Enter 10-digit mobile'); }
@@ -634,7 +671,7 @@ async function screenOwnerEdit(p) {
     try {
       await api('owner/shop/save', { body: { name: D.name, owner_name: D.owner_name, mobile: D.mobile, whatsapp: D.mobile, gstin: D.gstin, shop_type: D.shop_type, is_service: D.is_service ? 1 : 0, city_id: D.city_id, area: D.area, address: D.address, pincode: D.pincode, lat: D.lat, lng: D.lng, open_time: D.open_time_24, close_time: D.close_time_24, weekly_off: D.weekly_off, categories: D.cats, brands: D.brs, products: D.prods } });
       store.del('draft'); await loadOwner();
-      if (!OWNER.photos.length) go('#/owner/photos'); else { toast('Saved'); go('#/owner'); }
+      if (!OWNER.photos.length) go('#/owner/photos', true); else { toast('Saved'); goBackTo('#/owner'); }
     } catch (e) { toast(e.message); }
   };
 }
@@ -645,7 +682,7 @@ async function screenOwnerPhotos() {
   if (needLogin()) return;
   render('<div class="scr nonav">' + loading() + '</div>');
   await loadOwner();
-  if (!OWNER) return go('#/owner/edit?step=2');
+  if (!OWNER) return go('#/owner/edit?step=2', true);
   const ph = OWNER.photos;
   const have = new Set(ph.map(x => x.label));
   const next = REQUIRED.find(r => !have.has(r)) || 'More';
@@ -672,9 +709,9 @@ async function screenOwnerPhotos() {
   };
   document.querySelectorAll('[data-del]').forEach(b => b.onclick = async () => { if (!confirm('Delete this photo?')) return; await api('owner/photo/delete', { body: { id: b.dataset.del } }).catch(e => toast(e.message)); screenOwnerPhotos(); });
   document.getElementById('sub').onclick = async () => {
-    if (OWNER.status === 'verified') return go('#/owner');
+    if (OWNER.status === 'verified') return goBackTo('#/owner');
     if (!ph.length) return toast('Take at least one live photo');
-    try { await api('owner/submit', { body: {} }); toast('Submitted! We will verify within 24 hours.'); go('#/owner'); } catch (e) { toast(e.message); }
+    try { await api('owner/submit', { body: {} }); toast('Submitted! We will verify within 24 hours.'); goBackTo('#/owner'); } catch (e) { toast(e.message); }
   };
 }
 function stampPhoto(file, loc, label) {
@@ -735,13 +772,13 @@ async function screenOwnerPlans() {
     document.querySelectorAll('[data-p]').forEach(el => el.onclick = () => { sel = el.dataset.p; draw(); });
     const up = document.getElementById('up');
     if (up) up.onclick = async () => {
-      if (!OWNER) return go('#/owner/edit?step=2');
+      if (!OWNER) return go('#/owner/edit?step=2', true);
       try {
         const r = await api('owner/upgrade', { body: { plan: sel } });
         openExt(r.upi_link);
         const box = sheet('<h3>Pay ' + inr(r.amount) + '</h3><p class="muted">' + esc(r.message) + '</p><p>UPI ID: <b>' + esc(m.support.upi) + '</b></p><button class="btn blk o" id="again">Open UPI app again</button><label class="l">UPI transaction ID / UTR</label><input class="inp" id="ref" placeholder="12-digit UTR"><button class="btn blk" id="done" style="margin-top:12px">I have paid</button>');
         box.querySelector('#again').onclick = () => openExt(r.upi_link);
-        box.querySelector('#done').onclick = async () => { await api('owner/payment-ref', { body: { payment_id: r.payment_id, reference: box.querySelector('#ref').value } }).catch(() => {}); closeSheet(); toast('Thanks! We will activate your plan shortly.'); go('#/owner'); };
+        box.querySelector('#done').onclick = async () => { await api('owner/payment-ref', { body: { payment_id: r.payment_id, reference: box.querySelector('#ref').value } }).catch(() => {}); closeSheet(); goBackTo('#/owner'); };
       } catch (e) { toast(e.message); }
     };
   };
@@ -787,11 +824,11 @@ function route() {
     }
   } catch (e) { console.error(e); toast(e.message); }
 }
-window.addEventListener('hashchange', route);
+window.addEventListener('hashchange', () => { track(curHash()); route(); });
 window.addEventListener('unhandledrejection', e => { toast((e.reason && e.reason.message) || 'Something went wrong'); });
 // Android back button support: native calls EH.back(); returns true if handled
-window.EH = { back() { if (document.getElementById('sheet').classList.contains('show')) { closeSheet(); return true; } const h = location.hash; if (!h || h === '#/home' || h === '#/login' || h === '#/owner') return false; history.back(); return true; } };
+window.EH = { back: navBack };
 
-if (!location.hash) location.hash = S.token ? (S.role === 'owner' ? '#/owner' : '#/home') : '#/login';
-else route();
+if (!location.hash) { NAV.stack = []; location.replace(S.token ? (S.role === 'owner' ? '#/owner' : '#/home') : '#/login'); }
+else { if (!NAV.stack.length || NAV.stack[NAV.stack.length - 1] !== curHash()) track(curHash()); route(); }
 })();
