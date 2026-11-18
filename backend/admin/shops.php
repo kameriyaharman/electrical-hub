@@ -47,7 +47,7 @@ function import_shops($file) {
         if ($cityName && !$cityId) { q("INSERT INTO cities (name) VALUES (?)", [$cityName]); $cityId = last_id(); }
         q("INSERT INTO shops (name, owner_name, mobile, whatsapp, shop_type, city_id, area, address, lat, lng, gstin, status) VALUES (?,?,?,?,?,?,?,?,?,?,?, 'verified')",
             [$name, $col($r, 'owner'), $mobile, substr(preg_replace('/\D/', '', $col($r, 'whatsapp')), -10) ?: $mobile,
-                in_array($col($r, 'type'), ['Retail', 'Wholesale', 'Both']) ? $col($r, 'type') : 'Retail', $cityId, $col($r, 'area'), $col($r, 'address'),
+                in_array($col($r, 'type'), ['Retail', 'Wholesale', 'Manufacturer', 'Both']) ? $col($r, 'type') : 'Retail', $cityId, $col($r, 'area'), $col($r, 'address'),
                 $col($r, 'lat') !== '' ? (float)$col($r, 'lat') : null, $col($r, 'lng') !== '' ? (float)$col($r, 'lng') : null, $col($r, 'gstin') ?: null]);
         $sid = last_id();
         foreach (array_filter(array_map('trim', explode(',', $col($r, 'categories')))) as $c) {

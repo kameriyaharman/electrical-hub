@@ -43,6 +43,9 @@ function migrate($pdo) {
         ],
         'users' => [
             'notif_seen_id' => "INT NOT NULL DEFAULT 0",
+            'pin_hash' => "VARCHAR(255) NULL",
+            'pin_fails' => "INT NOT NULL DEFAULT 0",
+            'pin_locked_until' => "DATETIME NULL",
         ],
     ];
     // App renamed: Electrical Hub -> Electrical Market Hub

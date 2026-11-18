@@ -55,7 +55,7 @@ function shops_query($opts) {
     if (!empty($opts['brand_id'])) { $where[] = 's.id IN (SELECT shop_id FROM shop_brands WHERE brand_id = ?)'; $p[] = (int)$opts['brand_id']; }
     if (!empty($opts['product_id'])) { $where[] = 's.id IN (SELECT shop_id FROM shop_products WHERE product_id = ?)'; $p[] = (int)$opts['product_id']; }
     if (!empty($opts['min_rating'])) { $where[] = 's.rating >= ?'; $p[] = (float)$opts['min_rating']; }
-    if (!empty($opts['shop_type'])) { $where[] = "(s.shop_type = ? OR s.shop_type = 'Both')"; $p[] = $opts['shop_type']; }
+    if (!empty($opts['shop_type'])) { $where[] = $opts['shop_type'] === 'Manufacturer' ? "s.shop_type = ?" : "(s.shop_type = ? OR s.shop_type = 'Both')"; $p[] = $opts['shop_type']; }
     if (!empty($opts['featured'])) { $where[] = "s.plan IN ('featured','premium')"; }
     if (!empty($opts['q'])) {
         $like = '%' . $opts['q'] . '%';
@@ -79,6 +79,25 @@ function shops_query($opts) {
     $cards = array_map('shop_card', $rows);
     if (!empty($opts['open_now'])) $cards = array_values(array_filter($cards, fn($c) => $c['open']));
     return [$cards, $total];
+}
+
+function clean_mobile($m) {
+    $m = substr(preg_replace('/\D/', '', (string)$m), -10);
+    if (strlen($m) !== 10 || $m[0] < '6') fail('Enter a valid 10-digit mobile number');
+    return $m;
+}
+function valid_pin($p) {
+    $p = (string)$p;
+    if (!preg_match('/^\d{4}$/', $p)) fail('PIN must be 4 digits');
+    if (in_array($p, ['0000', '1111', '1234', '2222', '3333', '4444', '5555', '6666', '7777', '8888', '9999', '4321'], true)) fail('This PIN is too easy to guess. Choose another.');
+    return $p;
+}
+function issue_login($u, $role) {
+    if ($role === 'owner' && $u['role'] !== 'owner') { q("UPDATE users SET role = 'owner' WHERE id = ?", [$u['id']]); $u['role'] = 'owner'; }
+    q("UPDATE users SET last_login = NOW() WHERE id = ?", [$u['id']]);
+    $tok = bin2hex(random_bytes(32));
+    q("INSERT INTO api_tokens (token, user_id) VALUES (?, ?)", [$tok, $u['id']]);
+    out(['ok' => true, 'token' => $tok, 'user' => ['id' => (int)$u['id'], 'mobile' => $u['mobile'], 'name' => $u['name'], 'role' => $role, 'city_id' => (int)$u['city_id']]]);
 }
 
 function send_otp_sms($mobile, $code) {
@@ -136,43 +155,55 @@ try {
         out(['ok' => true, 'app' => APP_NAME, 'db' => $dbok, 'shops' => $shops, 'time' => date('c')]);
 
     // ---------- Auth ----------
-    case 'auth/send-otp':
-        $mobile = preg_replace('/\D/', '', (string)in('mobile'));
-        $mobile = substr($mobile, -10);
-        if (strlen($mobile) !== 10) fail('Enter a valid 10-digit mobile number');
-        // Test mode: fixed OTP (default 1234) until an SMS gateway (MSG91) is switched on in Settings
-        $live = setting('otp_mode') === 'msg91' && setting('msg91_authkey');
-        $code = $live ? (string)random_int(1000, 9999) : (setting('test_otp', '1234') ?: '1234');
-        q("INSERT INTO otps (mobile, code, expires_at, attempts) VALUES (?, ?, DATE_ADD(NOW(), INTERVAL 10 MINUTE), 0)
-           ON DUPLICATE KEY UPDATE code = VALUES(code), expires_at = VALUES(expires_at), attempts = 0", [$mobile, $code]);
-        $sent = send_otp_sms($mobile, $code);
-        $res = ['ok' => true, 'message' => 'OTP sent to +91 ' . $mobile];
-        if (!$sent) $res['demo_otp'] = $code; // demo mode: no SMS gateway configured yet
-        out($res);
+    // ---------- Login: mobile number + 4-digit PIN ----------
+    case 'auth/check':
+        $mobile = clean_mobile(in('mobile'));
+        $u = one("SELECT pin_hash, status FROM users WHERE mobile = ?", [$mobile]);
+        out(['ok' => true, 'registered' => (bool)($u && $u['pin_hash']), 'blocked' => $u && $u['status'] === 'blocked']);
 
-    case 'auth/verify-otp':
-        $mobile = substr(preg_replace('/\D/', '', (string)in('mobile')), -10);
-        $code = trim((string)in('code'));
-        $row = one("SELECT * FROM otps WHERE mobile = ?", [$mobile]);
-        if (!$row || strtotime($row['expires_at']) < time()) fail('OTP expired, please resend');
-        if ($row['attempts'] >= 5) fail('Too many attempts, please resend OTP');
-        if (!hash_equals($row['code'], $code)) { q("UPDATE otps SET attempts = attempts + 1 WHERE mobile = ?", [$mobile]); fail('Wrong OTP'); }
-        q("DELETE FROM otps WHERE mobile = ?", [$mobile]);
+    case 'auth/register':
+        $mobile = clean_mobile(in('mobile'));
+        $pin = valid_pin(in('pin'));
         $role = in('role') === 'owner' ? 'owner' : 'customer';
         $u = one("SELECT * FROM users WHERE mobile = ?", [$mobile]);
+        if ($u && $u['pin_hash']) fail('This number is already registered. Login with your PIN.');
+        if ($u && $u['status'] === 'blocked') fail('Your account is blocked. Contact support.', 403);
+        $name = trim((string)in('name')) ?: null;
         if (!$u) {
-            q("INSERT INTO users (mobile, role, city_id) VALUES (?, ?, ?)", [$mobile, $role, (int)setting('default_city_id', 1)]);
+            q("INSERT INTO users (mobile, name, role, city_id, pin_hash) VALUES (?,?,?,?,?)", [$mobile, $name, $role, (int)setting('default_city_id', 1), password_hash($pin, PASSWORD_DEFAULT)]);
             $u = one("SELECT * FROM users WHERE id = ?", [last_id()]);
-        } elseif ($role === 'owner' && $u['role'] !== 'owner') {
-            q("UPDATE users SET role = 'owner' WHERE id = ?", [$u['id']]); $u['role'] = 'owner';
+        } else {
+            q("UPDATE users SET pin_hash = ?, name = COALESCE(name, ?) WHERE id = ?", [password_hash($pin, PASSWORD_DEFAULT), $name, $u['id']]);
         }
+        issue_login($u, $role);
+
+    case 'auth/login':
+        $mobile = clean_mobile(in('mobile'));
+        $role = in('role') === 'owner' ? 'owner' : 'customer';
+        $u = one("SELECT * FROM users WHERE mobile = ?", [$mobile]);
+        if (!$u || !$u['pin_hash']) fail('This number is not registered yet. Create your PIN first.');
         if ($u['status'] === 'blocked') fail('Your account is blocked. Contact support.', 403);
-        // link shop if this mobile already has a listing (e.g. added by admin)
-        q("UPDATE shops SET owner_user_id = ?, mobile_verified = 1 WHERE mobile = ? AND owner_user_id IS NULL", [$u['id'], $mobile]);
-        q("UPDATE users SET last_login = NOW() WHERE id = ?", [$u['id']]);
-        $tok = bin2hex(random_bytes(32));
-        q("INSERT INTO api_tokens (token, user_id) VALUES (?, ?)", [$tok, $u['id']]);
-        out(['ok' => true, 'token' => $tok, 'user' => ['id' => (int)$u['id'], 'mobile' => $u['mobile'], 'name' => $u['name'], 'role' => $role, 'city_id' => (int)$u['city_id']]]);
+        if ($u['pin_locked_until'] && strtotime($u['pin_locked_until']) > time()) fail('Too many wrong PINs. Try again after 15 minutes or ask support to reset your PIN.', 429);
+        if (!password_verify((string)in('pin'), $u['pin_hash'])) {
+            $fails = (int)$u['pin_fails'] + 1;
+            if ($fails >= 5) q("UPDATE users SET pin_fails = 0, pin_locked_until = DATE_ADD(NOW(), INTERVAL 15 MINUTE) WHERE id = ?", [$u['id']]);
+            else q("UPDATE users SET pin_fails = ? WHERE id = ?", [$fails, $u['id']]);
+            fail($fails >= 5 ? 'Too many wrong PINs. Try again after 15 minutes.' : 'Wrong PIN (' . (5 - $fails) . ' tries left)');
+        }
+        q("UPDATE users SET pin_fails = 0, pin_locked_until = NULL WHERE id = ?", [$u['id']]);
+        issue_login($u, $role);
+
+    case 'me/pin':
+        $u = auth_user();
+        $full = one("SELECT pin_hash FROM users WHERE id = ?", [$u['id']]);
+        if ($full['pin_hash'] && !password_verify((string)in('old_pin'), $full['pin_hash'])) fail('Current PIN is wrong');
+        q("UPDATE users SET pin_hash = ? WHERE id = ?", [password_hash(valid_pin(in('pin')), PASSWORD_DEFAULT), $u['id']]);
+        out(['ok' => true]);
+
+    // Old OTP login (app versions before 1.8)
+    case 'auth/send-otp':
+    case 'auth/verify-otp':
+        fail('Please update the app — login now uses your mobile number and PIN.', 410);
 
     case 'auth/logout':
         $tok = $_SERVER['HTTP_X_AUTH_TOKEN'] ?? '';
@@ -391,7 +422,7 @@ try {
             'name' => $name, 'owner_name' => trim((string)in('owner_name')), 'mobile' => $mobile,
             'whatsapp' => substr(preg_replace('/\D/', '', (string)in('whatsapp', $mobile)), -10) ?: $mobile,
             'gstin' => strtoupper(trim((string)in('gstin'))) ?: null,
-            'shop_type' => in_array(in('shop_type'), ['Retail', 'Wholesale', 'Both'], true) ? in('shop_type') : 'Retail',
+            'shop_type' => in_array(in('shop_type'), ['Retail', 'Wholesale', 'Manufacturer', 'Both'], true) ? in('shop_type') : 'Retail',
             'is_service' => in('is_service') ? 1 : 0, 'address' => trim((string)in('address')), 'city_id' => (int)in('city_id', $u['city_id']),
             'area' => trim((string)in('area')), 'pincode' => trim((string)in('pincode')),
             'lat' => in('lat') !== null && in('lat') !== '' ? (float)in('lat') : null, 'lng' => in('lng') !== null && in('lng') !== '' ? (float)in('lng') : null,

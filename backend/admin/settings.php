@@ -3,7 +3,7 @@ require __DIR__ . '/_bootstrap.php';
 require_admin();
 check_csrf();
 
-$keys = ['app_name', 'support_phone', 'support_whatsapp', 'support_email', 'upi_id', 'otp_mode', 'msg91_authkey', 'msg91_template_id', 'test_otp', 'gps_match_radius_m', 'expiry_reminder_days', 'default_city_id'];
+$keys = ['app_name', 'support_phone', 'support_whatsapp', 'support_email', 'upi_id', 'gps_match_radius_m', 'expiry_reminder_days', 'default_city_id'];
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (post('action') === 'save') { foreach ($keys as $k) if (isset($_POST[$k])) set_setting($k, post($k)); flash('Settings saved'); }
     if (post('action') === 'password') {
@@ -31,10 +31,8 @@ page_header('Settings', 'settings', 'App details, OTP / SMS, payments and admin 
 <div class="fr"><div><label>Default city</label><select name="default_city_id"><?php foreach (all("SELECT id, name FROM cities ORDER BY name") as $c): ?><option value="<?= $c['id'] ?>" <?= setting('default_city_id') == $c['id'] ? 'selected' : '' ?>><?= h($c['name']) ?></option><?php endforeach; ?></select></div>
 <div><label>GPS match radius (m)</label><input type="number" name="gps_match_radius_m" value="<?= $s('gps_match_radius_m') ?>"></div></div>
 <label>Plan expiry reminder (days before)</label><input type="number" name="expiry_reminder_days" value="<?= $s('expiry_reminder_days') ?>">
-<h3 style="margin-top:18px">OTP login</h3>
-<label>Mode</label><select name="otp_mode"><option value="demo" <?= setting('otp_mode') !== 'msg91' ? 'selected' : '' ?>>Test — fixed OTP for every number</option><option value="msg91" <?= setting('otp_mode') === 'msg91' ? 'selected' : '' ?>>MSG91 — real SMS</option></select>
-<label>Test OTP (used in Test mode)</label><input type="text" name="test_otp" maxlength="4" value="<?= h(setting('test_otp', '1234')) ?>">
-<div class="fr"><div><label>MSG91 auth key</label><input type="text" name="msg91_authkey" value="<?= $s('msg91_authkey') ?>"></div><div><label>MSG91 OTP template ID</label><input type="text" name="msg91_template_id" value="<?= $s('msg91_template_id') ?>"></div></div>
+<h3 style="margin-top:18px">Login</h3>
+<p style="font-size:12.5px;color:var(--mute);margin:0">Users log in with mobile number + their own 4-digit PIN. To reset someone's PIN go to <a href="customers.php">Customers</a> → Reset PIN.</p>
 <button class="btn p" style="margin-top:14px" name="action" value="save">Save settings</button>
 </form>
 <div>

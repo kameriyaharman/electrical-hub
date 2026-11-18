@@ -205,7 +205,7 @@ new MutationObserver(() => { if (BIND_PENDING) return; BIND_PENDING = true; Prom
 // Lightweight remote log (errors + screen changes) so problems on real phones show up in the server logs
 function rlog(type, msg) {
   try {
-    const body = JSON.stringify({ type, msg: String(msg).slice(0, 300), hash: location.hash, app: NATIVE ? 'android' : 'web', v: '1.7' });
+    const body = JSON.stringify({ type, msg: String(msg).slice(0, 300), hash: location.hash, app: NATIVE ? 'android' : 'web', v: '1.8' });
     if (navigator.sendBeacon) navigator.sendBeacon(API + '?r=log', new Blob([body], { type: 'text/plain' }));
     else fetch(API + '?r=log', { method: 'POST', body }).catch(() => {});
   } catch (e) {}
@@ -240,51 +240,88 @@ function setCity(c) {
 
 // ---------- Login ----------
 function screenLogin() {
-  let role = S.role || 'customer', mobile = '', step = 1, demo = '';
+  // step: 'mobile' → 'pin' (registered) or 'create' (new number)
+  let role = S.role || 'customer', mobile = '', step = 'mobile', name = '';
+  const pinBoxes = id => '<div class="otp" id="' + id + '">' + [0, 1, 2, 3].map(i => '<input type="password" inputmode="numeric" maxlength="1" data-i="' + i + '">').join('') + '</div>';
+  const readPin = id => [...document.querySelectorAll('#' + id + ' input')].map(x => x.value).join('');
+  const wirePin = (id, done) => {
+    const ins = [...document.querySelectorAll('#' + id + ' input')];
+    ins.forEach((inp, i) => {
+      inp.oninput = () => { inp.value = inp.value.replace(/\D/g, '').slice(-1); if (inp.value && ins[i + 1]) ins[i + 1].focus(); if (ins.every(x => x.value) && done) done(); };
+      inp.onkeydown = e => { if (e.key === 'Backspace' && !inp.value && ins[i - 1]) ins[i - 1].focus(); };
+    });
+    return ins;
+  };
   const draw = () => {
+    let box = '';
+    if (step === 'mobile') box =
+      '<label class="l">Mobile number</label><div style="display:flex;gap:8px"><span class="inp" style="width:auto;flex:none;color:var(--mute)">+91</span><input class="inp" id="mob" type="tel" inputmode="numeric" maxlength="10" placeholder="98xxxxxx10" value="' + esc(mobile) + '"></div>' +
+      '<div class="roles"><button data-role="customer" class="' + (role === 'customer' ? 'on' : '') + '">I am a customer</button><button data-role="owner" class="' + (role === 'owner' ? 'on' : '') + '">I own a shop</button></div>' +
+      '<button class="btn blk" id="cont" style="margin-top:16px">Continue</button>';
+    else if (step === 'pin') box =
+      '<div class="muted">+91 ' + esc(mobile) + ' · <a href="#" id="chg" style="color:var(--blue)">change</a></div>' +
+      '<label class="l">Enter your 4-digit PIN</label>' + pinBoxes('p1') +
+      '<button class="btn blk" id="login" style="margin-top:16px">Login</button>' +
+      '<p style="text-align:center;font-size:12.5px;margin:12px 0 0"><a href="#" id="forgot" style="color:var(--blue)">Forgot PIN?</a></p>';
+    else box =
+      '<div class="muted">+91 ' + esc(mobile) + ' · <a href="#" id="chg" style="color:var(--blue)">change</a></div>' +
+      '<label class="l">Your name</label><input class="inp" id="nm" value="' + esc(name) + '" placeholder="' + (role === 'owner' ? 'Owner name' : 'Your name') + '">' +
+      '<label class="l">Create a 4-digit PIN</label>' + pinBoxes('p1') +
+      '<label class="l">Enter the PIN again</label>' + pinBoxes('p2') +
+      '<p class="muted" style="margin:8px 0 0">You will use this PIN to log in. Don\'t share it.</p>' +
+      '<button class="btn blk" id="reg" style="margin-top:14px">Create account</button>';
     render('<div class="login"><div class="top"><div class="big">' + BOLT + '</div><h2>Electrical Market <b>Hub</b></h2><p>Every electrical shop near you — in one app</p></div>' +
-      '<div class="box">' + (step === 1 ?
-        '<label class="l">Mobile number</label><div style="display:flex;gap:8px"><span class="inp" style="width:auto;flex:none;color:var(--mute)">+91</span><input class="inp" id="mob" type="tel" inputmode="numeric" maxlength="10" placeholder="98xxxxxx10" value="' + esc(mobile) + '"></div>' +
-        '<div class="roles"><button data-role="customer" class="' + (role === 'customer' ? 'on' : '') + '">I am a customer</button><button data-role="owner" class="' + (role === 'owner' ? 'on' : '') + '">I own a shop</button></div>' +
-        '<button class="btn blk" id="send" style="margin-top:16px">Get OTP</button>'
-        :
-        '<label class="l">Enter the 4-digit OTP sent to +91 ' + esc(mobile) + '</label><div class="otp">' + [0, 1, 2, 3].map(i => '<input inputmode="numeric" maxlength="1" data-i="' + i + '">').join('') + '</div>' +
-        (demo ? '<div class="demo">Demo mode (no SMS gateway yet) — your OTP is <b>' + demo + '</b></div>' : '') +
-        '<button class="btn blk" id="verify" style="margin-top:16px">Continue</button><p style="text-align:center;font-size:12.5px;margin:12px 0 0"><a href="#" id="chg" style="color:var(--blue)">Change number</a> · <a href="#" id="resend" style="color:var(--blue)">Resend OTP</a></p>') +
-      '</div><p style="text-align:center;font-size:12px;color:var(--mute);margin:16px"><a href="#/home" id="skip">Skip for now — browse shops</a></p></div>');
-    if (step === 1) {
+      '<div class="box">' + box + '</div><p style="text-align:center;font-size:12px;color:var(--mute);margin:16px"><a href="#/home">Skip for now — browse shops</a></p></div>');
+    if (step === 'mobile') {
       const mob = document.getElementById('mob');
       mob.oninput = () => mobile = mob.value.replace(/\D/g, '');
       document.querySelectorAll('[data-role]').forEach(b => b.onclick = () => { role = b.dataset.role; draw(); });
-      document.getElementById('send').onclick = send;
+      document.getElementById('cont').onclick = check;
+      mob.onkeydown = e => { if (e.key === 'Enter') check(); };
     } else {
-      const ins = [...document.querySelectorAll('.otp input')];
-      ins.forEach((inp, i) => {
-        inp.oninput = () => { inp.value = inp.value.replace(/\D/g, '').slice(-1); if (inp.value && ins[i + 1]) ins[i + 1].focus(); if (ins.every(x => x.value)) verify(); };
-        inp.onkeydown = e => { if (e.key === 'Backspace' && !inp.value && ins[i - 1]) ins[i - 1].focus(); };
-      });
-      ins[0].focus();
-      if (demo) { /* helpful autofill for demo mode */ ins.forEach((x, i) => x.placeholder = demo[i]); }
-      document.getElementById('verify').onclick = verify;
-      document.getElementById('chg').onclick = e => { e.preventDefault(); step = 1; draw(); };
-      document.getElementById('resend').onclick = e => { e.preventDefault(); send(); };
+      document.getElementById('chg').onclick = e => { e.preventDefault(); step = 'mobile'; draw(); };
+      if (step === 'pin') {
+        wirePin('p1', login)[0].focus();
+        document.getElementById('login').onclick = login;
+        document.getElementById('forgot').onclick = e => { e.preventDefault(); forgot(); };
+      } else {
+        const a = wirePin('p1', () => document.querySelector('#p2 input').focus()); wirePin('p2');
+        document.getElementById('nm').oninput = e => name = e.target.value;
+        a[0].focus();
+        document.getElementById('reg').onclick = register;
+      }
     }
   };
-  async function send() {
-    if (mobile.length !== 10) return toast('Enter your 10-digit mobile number');
-    try { const r = await api('auth/send-otp', { body: { mobile } }); demo = r.demo_otp || ''; step = 2; draw(); toast(r.message); }
+  async function check() {
+    if (!/^[6-9]\d{9}$/.test(mobile)) return toast('Enter your 10-digit mobile number');
+    try { const r = await api('auth/check', { body: { mobile } }); if (r.blocked) return toast('This account is blocked. Contact support.'); step = r.registered ? 'pin' : 'create'; draw(); }
     catch (e) { toast(e.message); }
   }
-  async function verify() {
-    const code = [...document.querySelectorAll('.otp input')].map(x => x.value).join('');
-    if (code.length !== 4) return toast('Enter the 4-digit OTP');
-    try {
-      const r = await api('auth/verify-otp', { body: { mobile, code, role } });
-      S.token = r.token; S.user = r.user; S.role = role;
-      store.set('token', r.token); store.set('user', r.user); store.set('role', role); syncNative();
-      if (!S.city) { const m = await meta(); const c = m.cities.find(x => x.id == r.user.city_id); if (c) setCity(c); }
-      if (role === 'owner') { NAV.stack = ['#/home']; go('#/owner', true); } else go('#/home', true);
-    } catch (e) { toast(e.message); }
+  async function login() {
+    const pin = readPin('p1'); if (pin.length !== 4) return toast('Enter your 4-digit PIN');
+    try { done(await api('auth/login', { body: { mobile, pin, role } })); }
+    catch (e) { toast(e.message); document.querySelectorAll('#p1 input').forEach(x => x.value = ''); const f = document.querySelector('#p1 input'); if (f) f.focus(); }
+  }
+  async function register() {
+    const p1 = readPin('p1'), p2 = readPin('p2');
+    if (p1.length !== 4) return toast('Create a 4-digit PIN');
+    if (p1 !== p2) return toast('Both PINs must match');
+    try { done(await api('auth/register', { body: { mobile, pin: p1, role, name: name.trim() } })); }
+    catch (e) { toast(e.message); }
+  }
+  async function forgot() {
+    const m = await meta().catch(() => null);
+    const sup = m && m.support && (m.support.whatsapp || m.support.phone);
+    const box = sheet('<h3>Forgot PIN?</h3><p class="muted">Our support team will reset your PIN after checking your number.</p>' +
+      (sup ? '<button class="btn blk wa" id="fw">' + icon('wa') + ' Ask support on WhatsApp</button>' : '<p>Please contact the Electrical Market Hub team.</p>'));
+    const fw = box.querySelector('#fw');
+    if (fw) fw.onclick = () => openExt('https://wa.me/91' + sup + '?text=' + encodeURIComponent('Hi, please reset my Electrical Market Hub PIN. My mobile number: ' + mobile));
+  }
+  async function done(r) {
+    S.token = r.token; S.user = r.user; S.role = role;
+    store.set('token', r.token); store.set('user', r.user); store.set('role', role); syncNative();
+    if (!S.city) { const m = await meta(); const c = m.cities.find(x => x.id == r.user.city_id); if (c) setCity(c); }
+    if (role === 'owner') { NAV.stack = ['#/home']; go('#/owner', true); } else go('#/home', true);
   }
   draw();
 }
@@ -387,7 +424,7 @@ async function screenShops(p) {
   document.getElementById('flt').onclick = () => {
     const box = sheet('<h3>Filter shops</h3><label class="l">Search</label><input class="inp" id="fq" value="' + esc(f.q) + '" placeholder="Shop, product or brand">' +
       '<label class="l">Brand</label><select class="inp" id="fb"><option value="">Any brand</option>' + (m.brands || []).map(b => '<option value="' + b.id + '"' + (f.brand_id == b.id ? ' selected' : '') + '>' + esc(b.name) + '</option>').join('') + '</select>' +
-      '<label class="l">Shop type</label><select class="inp" id="ft"><option value="">Any</option><option' + (f.shop_type === 'Retail' ? ' selected' : '') + '>Retail</option><option' + (f.shop_type === 'Wholesale' ? ' selected' : '') + '>Wholesale</option></select>' +
+      '<label class="l">Shop type</label><select class="inp" id="ft"><option value="">Any</option><option' + (f.shop_type === 'Retail' ? ' selected' : '') + '>Retail</option><option' + (f.shop_type === 'Wholesale' ? ' selected' : '') + '>Wholesale</option><option' + (f.shop_type === 'Manufacturer' ? ' selected' : '') + '>Manufacturer</option></select>' +
       '<label class="l">Sort by</label><select class="inp" id="fs"><option value="nearest">Nearest</option><option value="rating"' + (f.sort === 'rating' ? ' selected' : '') + '>Top rated</option></select>' +
       '<div style="display:flex;gap:10px;margin-top:16px"><button class="btn o" id="fr" style="flex:1">Clear</button><button class="btn" id="fa" style="flex:2">Apply</button></div>');
     box.querySelector('#fr').onclick = () => { closeSheet(); go('#/shops', true); };
@@ -568,10 +605,10 @@ async function screenAccount() {
     const ini = (d.user.name || 'U').split(' ').map(x => x[0]).join('').slice(0, 2).toUpperCase();
     document.getElementById('ac').innerHTML = '<div class="prof"><div class="av">' + esc(ini) + '</div><div style="flex:1"><b style="font-size:16px;color:var(--navy)">' + esc(nm) + '</b><div class="muted">+91 ' + esc(d.user.mobile) + (d.user.city ? ' · ' + esc(d.user.city.name) : '') + '</div></div><button class="btn sm o" id="ed">Edit</button></div>' +
       '<div class="list">' + li('heart', 'Saved shops', d.counts.saved, '#/saved') + li('file', 'My quote requests', d.counts.quotes, '#/quotes') + li('star', 'My reviews', d.counts.reviews, '#/my-reviews') +
-      li('bell', 'Notifications', d.counts.notifications ? d.counts.notifications + ' new' : '', '#/notifications') + li('pin', 'Change city', '', 'city') +
+      li('bell', 'Notifications', d.counts.notifications ? d.counts.notifications + ' new' : '', '#/notifications') + li('pin', 'Change city', '', 'city') + li('user', 'Change PIN', '', 'chpin') +
       (d.has_shop ? li('store', 'My shop dashboard', '', '#/owner') : li('store', 'List your shop (free)', '', '#/owner')) + li('help', 'Help & support', '', 'help') + li('logout', 'Logout', '', 'logout') + '</div>' +
       (d.has_shop ? '' : '<div class="own" data-href="#/owner">' + icon('store') + '<div><b>Own an electrical shop?</b><small>Get listed free & get customer calls</small></div></div>') +
-      '<p class="muted" style="text-align:center">Electrical Market Hub v1.7</p>';
+      '<p class="muted" style="text-align:center">Electrical Market Hub v1.8</p>';
     bindAccount();
     document.getElementById('ed').onclick = () => {
       const box = sheet('<h3>Your name</h3><input class="inp" id="nm" value="' + esc(d.user.name || '') + '"><button class="btn blk" id="sv" style="margin-top:12px">Save</button>');
@@ -583,8 +620,20 @@ function li(ic, label, right, target) { return '<div class="li" data-li="' + esc
 function bindAccount() {
   document.querySelectorAll('[data-li]').forEach(el => el.onclick = () => {
     const t = el.dataset.li;
-    if (t === 'city') pickCity(); else if (t === 'logout') { if (confirm('Logout?')) logout(); } else if (t === 'help') helpSheet(); else go(t);
+    if (t === 'city') pickCity(); else if (t === 'chpin') changePin(); else if (t === 'logout') { if (confirm('Logout?')) logout(); } else if (t === 'help') helpSheet(); else go(t);
   });
+}
+function changePin() {
+  const box = sheet('<h3>Change PIN</h3><label class="l">Current PIN</label><input class="inp" id="op" type="password" inputmode="numeric" maxlength="4">' +
+    '<label class="l">New 4-digit PIN</label><input class="inp" id="np" type="password" inputmode="numeric" maxlength="4">' +
+    '<label class="l">New PIN again</label><input class="inp" id="np2" type="password" inputmode="numeric" maxlength="4">' +
+    '<button class="btn blk" id="sp" style="margin-top:14px">Save new PIN</button>');
+  box.querySelector('#sp').onclick = async () => {
+    const op = box.querySelector('#op').value, np = box.querySelector('#np').value, np2 = box.querySelector('#np2').value;
+    if (!/^\d{4}$/.test(np)) return toast('New PIN must be 4 digits');
+    if (np !== np2) return toast('New PINs do not match');
+    try { await api('me/pin', { body: { old_pin: op, pin: np } }); closeSheet(); toast('PIN changed'); } catch (e) { toast(e.message); }
+  };
 }
 async function helpSheet() {
   const m = await meta();
@@ -688,7 +737,7 @@ async function screenOwnerEdit(p) {
     '<label class="l">Owner name</label><input class="inp" id="owner_name" value="' + esc(D.owner_name) + '">' +
     '<label class="l">Mobile / WhatsApp</label><input class="inp" id="mobile" type="tel" maxlength="10" value="' + esc(D.mobile) + '">' +
     '<label class="l">GSTIN (optional)</label><input class="inp" id="gstin" value="' + esc(D.gstin || '') + '" placeholder="33AAxxxxx1Z5" style="text-transform:uppercase">' +
-    '<label class="l">Shop type</label><div class="chips wrapc" id="stype">' + ['Retail', 'Wholesale', 'Both'].map(t => '<button class="chip ' + (D.shop_type === t ? 'on' : '') + '" data-t="' + t + '">' + t + '</button>').join('') + '<button class="chip ' + (D.is_service ? 'on' : '') + '" id="svc">Service / electrician</button></div>';
+    '<label class="l">Shop type</label><div class="chips wrapc" id="stype">' + ['Retail', 'Wholesale', 'Manufacturer', 'Both'].map(t => '<button class="chip ' + (D.shop_type === t ? 'on' : '') + '" data-t="' + t + '">' + t + '</button>').join('') + '<button class="chip ' + (D.is_service ? 'on' : '') + '" id="svc">Service / electrician</button></div>';
   if (step === 3) body = '<label class="l">Categories</label><div class="chips wrapc" id="cats">' + m.categories.map(c => '<button class="chip ' + (D.cats.includes(+c.id) ? 'on' : '') + '" data-id="' + c.id + '">' + esc(c.name) + '</button>').join('') + '</div>' +
     '<label class="l">Brands you sell</label><div class="chips wrapc" id="brs">' + m.brands.map(b => '<button class="chip ' + (D.brs.includes(+b.id) ? 'on' : '') + '" data-id="' + b.id + '">' + esc(b.name) + '</button>').join('') + '</div>' +
     '<label class="l">Popular products you stock</label><div class="chips wrapc" id="prs">' + loading() + '</div>';

@@ -61,7 +61,7 @@ page_header($s ? 'Edit shop' : 'Add shop', 'shops', $s ? h($s['name']) : 'Create
   <div class="fr"><div><label>Mobile *</label><input type="tel" name="mobile" required value="<?= $v('mobile') ?>"></div>
   <div><label>WhatsApp</label><input type="tel" name="whatsapp" value="<?= $v('whatsapp') ?>"></div></div>
   <label>Shop type</label><div class="chips">
-    <?php foreach (['Retail', 'Wholesale', 'Both'] as $t): ?><label><input type="radio" name="shop_type" value="<?= $t ?>" <?= ($s['shop_type'] ?? 'Retail') === $t ? 'checked' : '' ?>> <?= $t ?></label><?php endforeach; ?>
+    <?php foreach (['Retail', 'Wholesale', 'Manufacturer', 'Both'] as $t): ?><label><input type="radio" name="shop_type" value="<?= $t ?>" <?= ($s['shop_type'] ?? 'Retail') === $t ? 'checked' : '' ?>> <?= $t ?></label><?php endforeach; ?>
     <label><input type="checkbox" name="is_service" value="1" <?= !empty($s['is_service']) ? 'checked' : '' ?>> Service / electrician</label>
   </div>
   <label>Categories</label><div class="chips">
