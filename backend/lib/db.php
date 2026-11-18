@@ -171,3 +171,30 @@ function indian_number($n) {
 }
 function knum($n) { return $n >= 1000 ? rtrim(rtrim(number_format($n / 1000, 1), '0'), '.') . 'k' : (string)$n; }
 function h($s) { return htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8'); }
+
+/** Permanently delete a user account and the data linked to it (Google Play account-deletion requirement). */
+function delete_user_account($uid) {
+    $uid = (int)$uid;
+    foreach (all("SELECT id FROM shops WHERE owner_user_id = ?", [$uid]) as $sh) {
+        $sid = (int)$sh['id'];
+        foreach (all("SELECT path FROM shop_photos WHERE shop_id = ?", [$sid]) as $ph) {
+            if (strpos($ph['path'], 'demo/') !== 0) @unlink(rtrim(UPLOAD_DIR, '/') . '/' . $ph['path']);
+        }
+        foreach (['shop_categories', 'shop_brands', 'shop_products', 'shop_photos', 'offers', 'saved_shops', 'quote_recipients', 'reviews', 'leads'] as $t) q("DELETE FROM $t WHERE shop_id = ?", [$sid]);
+        q("DELETE FROM shops WHERE id = ?", [$sid]);
+    }
+    foreach (all("SELECT id, attachment FROM quote_requests WHERE user_id = ?", [$uid]) as $qr) {
+        if ($qr['attachment']) @unlink(rtrim(UPLOAD_DIR, '/') . '/' . $qr['attachment']);
+        q("DELETE FROM quote_recipients WHERE quote_id = ?", [$qr['id']]);
+    }
+    q("DELETE FROM quote_requests WHERE user_id = ?", [$uid]);
+    $shops = array_column(all("SELECT DISTINCT shop_id FROM reviews WHERE user_id = ?", [$uid]), 'shop_id');
+    q("DELETE FROM reviews WHERE user_id = ?", [$uid]);
+    foreach ($shops as $sid) q("UPDATE shops SET rating = COALESCE((SELECT ROUND(AVG(rating),1) FROM reviews WHERE shop_id = ? AND status = 'active'), 0) WHERE id = ?", [$sid, $sid]);
+    q("DELETE FROM saved_shops WHERE user_id = ?", [$uid]);
+    q("DELETE FROM notifications WHERE user_id = ?", [$uid]);
+    q("UPDATE leads SET user_id = NULL WHERE user_id = ?", [$uid]);
+    q("DELETE FROM api_tokens WHERE user_id = ?", [$uid]);
+    q("DELETE FROM users WHERE id = ?", [$uid]);
+}
+

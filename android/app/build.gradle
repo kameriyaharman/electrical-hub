@@ -8,14 +8,14 @@ def webOut = layout.buildDirectory.dir("webassets")
 
 android {
     namespace 'com.electricalhub.app'
-    compileSdk 34
+    compileSdk 36
 
     defaultConfig {
         applicationId "in.electricalhub.app"
         minSdk 24
-        targetSdk 34
-        versionCode 8
-        versionName "1.8"
+        targetSdk 36
+        versionCode 9
+        versionName "1.9"
         buildConfigField "String", "API_BASE", "\"${apiBase}\""
     }
 

@@ -22,22 +22,38 @@ jobs:
 
       - uses: gradle/actions/setup-gradle@v4
         with:
-          gradle-version: '8.7'
+          gradle-version: '8.13'
 
-      - name: Build APK
+      - name: Build APK (+ Play Store AAB when the upload key is configured)
         working-directory: android
+        env:
+          EH_KEYSTORE_B64: ${{ secrets.EH_KEYSTORE_B64 }}
+          EH_KEYSTORE_PASSWORD: ${{ secrets.EH_KEYSTORE_PASSWORD }}
+          EH_KEY_ALIAS: ${{ secrets.EH_KEY_ALIAS }}
+          EH_KEY_PASSWORD: ${{ secrets.EH_KEY_PASSWORD }}
         run: |
           API="${{ vars.API_BASE }}"
           if [ -z "$API" ]; then API=$(grep '^apiBase=' gradle.properties | cut -d= -f2-); fi
           echo "API base: $API"
+          TASKS="assembleRelease"
+          if [ -n "$EH_KEYSTORE_B64" ]; then
+            echo "$EH_KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/upload.jks"
+            export EH_KEYSTORE="$RUNNER_TEMP/upload.jks"
+            TASKS="assembleRelease bundleRelease"
+            echo "Signing with the Play upload key"
+          else
+            echo "No upload key secret — APK signed with the dev test key, no AAB"
+          fi
           set -o pipefail
-          gradle assembleRelease -PapiBase="$API" --no-daemon --stacktrace 2>&1 | tee ../build.log
+          gradle $TASKS -PapiBase="$API" --no-daemon --stacktrace 2>&1 | tee ../build.log
 
       - uses: actions/upload-artifact@v4
         if: success()
         with:
           name: ElectricalHub-apk
-          path: android/app/build/outputs/apk/release/*.apk
+          path: |
+            android/app/build/outputs/apk/release/*.apk
+            android/app/build/outputs/bundle/release/*.aab
 
       - name: Publish APK + log to "apk" branch
         if: always()
@@ -45,6 +61,7 @@ jobs:
           mkdir -p out
           tail -n 300 build.log > out/build.log 2>/dev/null || echo "no log" > out/build.log
           cp android/app/build/outputs/apk/release/*.apk out/ElectricalHub.apk 2>/dev/null || true
+          cp android/app/build/outputs/bundle/release/*.aab out/ElectricalMarketHub-playstore.aab 2>/dev/null || true
           echo "commit=${GITHUB_SHA} status=${{ job.status }} time=$(date -u +%FT%TZ)" > out/STATUS.txt
           cd out
           git init -q -b apk

@@ -205,7 +205,7 @@ new MutationObserver(() => { if (BIND_PENDING) return; BIND_PENDING = true; Prom
 // Lightweight remote log (errors + screen changes) so problems on real phones show up in the server logs
 function rlog(type, msg) {
   try {
-    const body = JSON.stringify({ type, msg: String(msg).slice(0, 300), hash: location.hash, app: NATIVE ? 'android' : 'web', v: '1.8' });
+    const body = JSON.stringify({ type, msg: String(msg).slice(0, 300), hash: location.hash, app: NATIVE ? 'android' : 'web', v: '1.9' });
     if (navigator.sendBeacon) navigator.sendBeacon(API + '?r=log', new Blob([body], { type: 'text/plain' }));
     else fetch(API + '?r=log', { method: 'POST', body }).catch(() => {});
   } catch (e) {}
@@ -594,7 +594,7 @@ async function screenQuotes() {
 async function screenAccount() {
   if (!S.token) {
     render('<div class="scr">' + hd('Account', { noBack: true }) + '<div class="empty"><div class="big">👤</div>Login to save shops, send quote requests and write reviews.<br><br><button class="btn" data-href="#/login">Login with mobile</button></div>' +
-      '<div class="list">' + li('pin', 'Change city', '', 'city') + li('store', 'List your shop (free)', '', '#/owner') + li('help', 'Help & support', '', 'help') + '</div></div>' + bottomNav('Account'));
+      '<div class="list">' + li('pin', 'Change city', '', 'city') + li('store', 'List your shop (free)', '', '#/owner') + li('help', 'Help & support', '', 'help') + li('file', 'Privacy policy', '', 'privacy') + '</div></div>' + bottomNav('Account'));
     bindAccount(); return;
   }
   render('<div class="scr">' + hd('Account', { noBack: true }) + '<div id="ac">' + loading() + '</div></div>' + bottomNav('Account'));
@@ -606,9 +606,10 @@ async function screenAccount() {
     document.getElementById('ac').innerHTML = '<div class="prof"><div class="av">' + esc(ini) + '</div><div style="flex:1"><b style="font-size:16px;color:var(--navy)">' + esc(nm) + '</b><div class="muted">+91 ' + esc(d.user.mobile) + (d.user.city ? ' · ' + esc(d.user.city.name) : '') + '</div></div><button class="btn sm o" id="ed">Edit</button></div>' +
       '<div class="list">' + li('heart', 'Saved shops', d.counts.saved, '#/saved') + li('file', 'My quote requests', d.counts.quotes, '#/quotes') + li('star', 'My reviews', d.counts.reviews, '#/my-reviews') +
       li('bell', 'Notifications', d.counts.notifications ? d.counts.notifications + ' new' : '', '#/notifications') + li('pin', 'Change city', '', 'city') + li('user', 'Change PIN', '', 'chpin') +
-      (d.has_shop ? li('store', 'My shop dashboard', '', '#/owner') : li('store', 'List your shop (free)', '', '#/owner')) + li('help', 'Help & support', '', 'help') + li('logout', 'Logout', '', 'logout') + '</div>' +
+      (d.has_shop ? li('store', 'My shop dashboard', '', '#/owner') : li('store', 'List your shop (free)', '', '#/owner')) + li('help', 'Help & support', '', 'help') + li('file', 'Privacy policy', '', 'privacy') + li('logout', 'Logout', '', 'logout') +
+      li('x', 'Delete my account', '', 'delacc') + '</div>' +
       (d.has_shop ? '' : '<div class="own" data-href="#/owner">' + icon('store') + '<div><b>Own an electrical shop?</b><small>Get listed free & get customer calls</small></div></div>') +
-      '<p class="muted" style="text-align:center">Electrical Market Hub v1.8</p>';
+      '<p class="muted" style="text-align:center">Electrical Market Hub v1.9</p>';
     bindAccount();
     document.getElementById('ed').onclick = () => {
       const box = sheet('<h3>Your name</h3><input class="inp" id="nm" value="' + esc(d.user.name || '') + '"><button class="btn blk" id="sv" style="margin-top:12px">Save</button>');
@@ -620,8 +621,20 @@ function li(ic, label, right, target) { return '<div class="li" data-li="' + esc
 function bindAccount() {
   document.querySelectorAll('[data-li]').forEach(el => el.onclick = () => {
     const t = el.dataset.li;
-    if (t === 'city') pickCity(); else if (t === 'chpin') changePin(); else if (t === 'logout') { if (confirm('Logout?')) logout(); } else if (t === 'help') helpSheet(); else go(t);
+    if (t === 'city') pickCity(); else if (t === 'chpin') changePin(); else if (t === 'delacc') deleteAccount(); else if (t === 'privacy') openExt(SITE + 'privacy.php'); else if (t === 'logout') { if (confirm('Logout?')) logout(); } else if (t === 'help') helpSheet(); else go(t);
   });
+}
+const SITE = API.replace(/api\/?$/, '');
+function deleteAccount() {
+  const box = sheet('<h3 style="color:var(--red)">Delete my account</h3><p class="muted">This permanently deletes your profile, saved shops, reviews and quote requests' + (S.role === 'owner' ? ', <b>and your shop listing with its photos and offers</b>' : '') + '. This cannot be undone.</p>' +
+    '<label class="l">Enter your PIN to confirm</label><input class="inp" id="dp" type="password" inputmode="numeric" maxlength="4">' +
+    '<button class="btn blk" id="dgo" style="margin-top:14px;background:var(--red)">Delete permanently</button><button class="btn blk o" id="dno" style="margin-top:8px">Cancel</button>');
+  box.querySelector('#dno').onclick = closeSheet;
+  box.querySelector('#dgo').onclick = async () => {
+    const pin = box.querySelector('#dp').value;
+    if (!/^\d{4}$/.test(pin)) return toast('Enter your 4-digit PIN');
+    try { await api('me/delete', { body: { pin } }); closeSheet(); toast('Your account has been deleted'); logout(true); } catch (e) { toast(e.message); }
+  };
 }
 function changePin() {
   const box = sheet('<h3>Change PIN</h3><label class="l">Current PIN</label><input class="inp" id="op" type="password" inputmode="numeric" maxlength="4">' +

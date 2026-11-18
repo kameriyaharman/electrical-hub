@@ -200,6 +200,14 @@ try {
         q("UPDATE users SET pin_hash = ? WHERE id = ?", [password_hash(valid_pin(in('pin')), PASSWORD_DEFAULT), $u['id']]);
         out(['ok' => true]);
 
+    case 'me/delete':
+        $u = auth_user();
+        $full = one("SELECT pin_hash FROM users WHERE id = ?", [$u['id']]);
+        if ($full['pin_hash'] && !password_verify((string)in('pin'), $full['pin_hash'])) fail('Wrong PIN');
+        delete_user_account($u['id']);
+        error_log('[ACCOUNT] deleted user ' . $u['id'] . ' via app');
+        out(['ok' => true]);
+
     // Old OTP login (app versions before 1.8)
     case 'auth/send-otp':
     case 'auth/verify-otp':
