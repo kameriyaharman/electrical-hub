@@ -219,7 +219,7 @@ new MutationObserver(() => { if (BIND_PENDING) return; BIND_PENDING = true; Prom
 // Lightweight remote log (errors + screen changes) so problems on real phones show up in the server logs
 function rlog(type, msg) {
   try {
-    const body = JSON.stringify({ type, msg: String(msg).slice(0, 300), hash: location.hash, app: NATIVE ? 'android' : 'web', v: '1.10' });
+    const body = JSON.stringify({ type, msg: String(msg).slice(0, 300), hash: location.hash, app: NATIVE ? 'android' : 'web', v: '1.11' });
     if (navigator.sendBeacon) navigator.sendBeacon(API + '?r=log', new Blob([body], { type: 'text/plain' }));
     else fetch(API + '?r=log', { method: 'POST', body }).catch(() => {});
   } catch (e) {}
@@ -641,7 +641,7 @@ async function screenAccount() {
       (d.has_shop ? li('store', 'My shop dashboard', '', '#/owner') : li('store', 'List your shop (free)', '', '#/owner')) + li('help', 'Help & support', '', 'help') + li('file', 'Privacy policy', '', 'privacy') + li('logout', 'Logout', '', 'logout') +
       li('x', 'Delete my account', '', 'delacc') + '</div>' +
       (d.has_shop ? '' : '<div class="own" data-href="#/owner">' + icon('store') + '<div><b>Own an electrical shop?</b><small>Get listed free & get customer calls</small></div></div>') +
-      '<p class="muted" style="text-align:center">Electrical Market Hub v1.10</p>';
+      '<p class="muted" style="text-align:center">Electrical Market Hub v1.11</p>';
     bindAccount();
     document.getElementById('ed').onclick = () => {
       const box = sheet('<h3>Your name</h3><input class="inp" id="nm" value="' + esc(d.user.name || '') + '"><button class="btn blk" id="sv" style="margin-top:12px">Save</button>');
@@ -788,7 +788,7 @@ async function screenOwnerEdit(p) {
     '<label class="l">Popular products you stock</label><div class="chips wrapc" id="prs">' + loading() + '</div>';
   if (step === 4) body = '<label class="l">Location</label><div class="minimap" id="mm"></div><button class="btn sm o" id="gps" style="margin-top:8px">' + icon('gps') + ' Use my current location</button> <span class="muted" id="ll">' + (D.lat ? 'Pin set ✓' : 'Drag the pin to your shop') + '</span>' +
     '<label class="l">City</label><select class="inp" id="city_id">' + m.cities.map(c => '<option value="' + c.id + '"' + (D.city_id == c.id ? ' selected' : '') + '>' + esc(c.name) + '</option>').join('') + '</select>' +
-    '<label class="l">Area</label><input class="inp" id="area" value="' + esc(D.area || '') + '" placeholder="e.g. GN Street, T. Nagar">' +
+    '<label class="l">Area / locality <span class="muted" style="font-weight:400">(optional)</span></label><input class="inp" id="area" value="' + esc(D.area || '') + '" placeholder="e.g. GN Street, T. Nagar">' +
     '<label class="l">Full address</label><input class="inp" id="address" value="' + esc(D.address || '') + '" placeholder="e.g. No. 222, GN Street">' +
     '<label class="l">Pincode</label><input class="inp" id="pincode" inputmode="numeric" maxlength="6" value="' + esc(D.pincode || '') + '">' +
     '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px"><div><label class="l">Opens</label><input class="inp" type="time" id="open_time" value="' + esc(D.open_time_24) + '"></div><div><label class="l">Closes</label><input class="inp" type="time" id="close_time" value="' + esc(D.close_time_24) + '"></div><div><label class="l">Weekly off</label><select class="inp" id="weekly_off"><option value="">None</option>' + ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(d => '<option' + (D.weekly_off === d ? ' selected' : '') + '>' + d + '</option>').join('') + '</select></div></div>';
@@ -809,11 +809,27 @@ async function screenOwnerEdit(p) {
     const map = L.map('mm', { zoomControl: false }).setView(start, D.lat || S.loc ? 16 : 12);
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 }).addTo(map);
     const mk = L.marker(start, { draggable: true, icon: L.divIcon({ className: '', html: '<div class="pin"></div>', iconSize: [30, 30], iconAnchor: [15, 30] }) }).addTo(map);
-    const setLL = ll => { D.lat = +ll.lat.toFixed(7); D.lng = +ll.lng.toFixed(7); document.getElementById('ll').textContent = 'Pin set ✓'; };
+    let cityTouched = !!(OWNER && OWNER.city_id);
+    document.getElementById('city_id').addEventListener('change', () => { cityTouched = true; });
+    const setLL = ll => {
+      D.lat = +ll.lat.toFixed(7); D.lng = +ll.lng.toFixed(7); document.getElementById('ll').textContent = 'Pin set ✓';
+      if (!cityTouched) {   // pick the nearest city to the pin
+        let best = null, bd = 1e9;
+        m.cities.forEach(c => { if (!c.lat) return; const d = Math.hypot(c.lat - D.lat, (c.lng - D.lng) * Math.cos(D.lat * Math.PI / 180)); if (d < bd) { bd = d; best = c; } });
+        if (best && bd < 0.6) { document.getElementById('city_id').value = best.id; D.city_id = best.id; }
+      }
+    };
     mk.on('dragend', () => setLL(mk.getLatLng()));
     map.on('click', e => { mk.setLatLng(e.latlng); setLL(e.latlng); });
     document.getElementById('gps').onclick = async () => { toast('Getting location…'); const l = await getLocation(true); if (!l) return toast('Turn on GPS / location'); mk.setLatLng([l.lat, l.lng]); map.setView([l.lat, l.lng], 17); setLL({ lat: l.lat, lng: l.lng }); };
-    if (!D.lat && S.loc) setLL({ lat: S.loc.lat, lng: S.loc.lng });
+    if (!D.lat && S.loc) { setLL({ lat: S.loc.lat, lng: S.loc.lng }); mk.setLatLng([D.lat, D.lng]); map.setView([D.lat, D.lng], 16); }
+    if (!D.lat) {   // new shop: put the pin at the phone's location straight away
+      document.getElementById('ll').textContent = 'Finding your location…';
+      getLocation(true).then(l => {
+        if (!l || D.lat || !document.getElementById('mm')) { if (!D.lat && document.getElementById('ll')) document.getElementById('ll').textContent = 'Tap the map or "Use my current location"'; return; }
+        mk.setLatLng([l.lat, l.lng]); map.setView([l.lat, l.lng], 16); setLL({ lat: l.lat, lng: l.lng });
+      });
+    }
   }
   const collect = () => {
     if (step === 2) ['name', 'owner_name', 'mobile', 'gstin'].forEach(k => D[k] = document.getElementById(k).value.trim());
@@ -828,7 +844,7 @@ async function screenOwnerEdit(p) {
     if (step === 3 && !D.cats.length) return fieldError('cats', 'Pick at least one category');
     if (step < 4 && isNew) return go('#/owner/edit?step=' + (step + 1));
     if (step === 4 && !D.lat) return fieldError('mm', 'Set your shop location: tap "Use my current location" or tap the map');
-    if (step === 4 && !D.area) return fieldError('area', 'Enter your area / locality (e.g. GN Street)');
+    if (step === 4 && !D.area) { const c = m.cities.find(x => x.id == D.city_id); D.area = c ? c.name : ''; }
     // save
     try {
       await api('owner/shop/save', { body: { name: D.name, owner_name: D.owner_name, mobile: D.mobile, whatsapp: D.mobile, gstin: D.gstin, shop_type: D.shop_type, is_service: D.is_service ? 1 : 0, city_id: D.city_id, area: D.area, address: D.address, pincode: D.pincode, lat: D.lat, lng: D.lng, open_time: D.open_time_24, close_time: D.close_time_24, weekly_off: D.weekly_off, categories: D.cats, brands: D.brs, products: D.prods } });
