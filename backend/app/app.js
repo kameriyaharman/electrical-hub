@@ -219,7 +219,7 @@ new MutationObserver(() => { if (BIND_PENDING) return; BIND_PENDING = true; Prom
 // Lightweight remote log (errors + screen changes) so problems on real phones show up in the server logs
 function rlog(type, msg) {
   try {
-    const body = JSON.stringify({ type, msg: String(msg).slice(0, 300), hash: location.hash, app: NATIVE ? 'android' : 'web', v: '1.11' });
+    const body = JSON.stringify({ type, msg: String(msg).slice(0, 300), hash: location.hash, app: NATIVE ? 'android' : 'web', v: '1.12' });
     if (navigator.sendBeacon) navigator.sendBeacon(API + '?r=log', new Blob([body], { type: 'text/plain' }));
     else fetch(API + '?r=log', { method: 'POST', body }).catch(() => {});
   } catch (e) {}
@@ -230,15 +230,75 @@ function sheet(html) { const s = document.getElementById('sheet'); s.querySelect
 function closeSheet() { document.getElementById('sheet').classList.remove('show'); }
 document.getElementById('sheet').addEventListener('click', e => { if (e.target.id === 'sheet') closeSheet(); });
 
+// ---------- place search (OpenStreetMap, any place in India) ----------
+function placeSearch(input, onPick, opts) {
+  opts = opts || {};
+  const wrap = document.createElement('div'); wrap.className = 'sugg'; const anchor = input.closest('.sbox') || input; anchor.parentNode.insertBefore(wrap, anchor.nextSibling);
+  let timer = 0, seq = 0, items = [];
+  const hide = () => { wrap.innerHTML = ''; wrap.classList.remove('show'); };
+  const show = list => {
+    items = list;
+    if (!list.length) { wrap.innerHTML = '<div class="si muted">No match — try another spelling</div>'; wrap.classList.add('show'); return; }
+    wrap.innerHTML = list.map((pl, i) => '<div class="si" data-i="' + i + '">' + icon('pin') + '<span><b>' + esc(pl.label) + '</b>' + (pl.sub ? '<small>' + esc(pl.sub) + '</small>' : '') + '</span></div>').join('');
+    wrap.classList.add('show');
+    wrap.querySelectorAll('[data-i]').forEach(el => {
+      const pick = e => { if (e) e.preventDefault(); const pl = items[+el.dataset.i]; hide(); if (pl) onPick(pl); };
+      el.addEventListener('mousedown', pick); el.addEventListener('touchstart', pick, { passive: false });
+    });
+  };
+  input.addEventListener('input', () => {
+    clearTimeout(timer); const v = input.value.trim();
+    if (opts.onType) opts.onType(v);
+    if (v.length < 2) return hide();
+    timer = setTimeout(async () => {
+      const my = ++seq;
+      wrap.innerHTML = '<div class="si muted">Searching…</div>'; wrap.classList.add('show');
+      const l = S.loc;
+      try {
+        const d = await api('geo/search', { params: { q: (opts.prefix ? opts.prefix() : '') + v, lat: l && l.lat, lng: l && l.lng } });
+        if (my !== seq) return;
+        let list = d.places || [];
+        if (opts.citiesOnly) { const seen = {}; list = list.filter(x => x.city).map(x => ({ label: x.city, sub: x.state, city: x.city, state: x.state, lat: x.lat, lng: x.lng })).filter(x => !seen[x.label + x.sub] && (seen[x.label + x.sub] = 1)); }
+        show(list);
+      } catch (e) { if (my === seq) { wrap.innerHTML = '<div class="si muted">Search not available — check internet</div>'; } }
+    }, 350);
+  });
+  input.addEventListener('blur', () => setTimeout(hide, 250));
+  return { hide };
+}
+async function cityFor(pl) {   // find or create the city of a place
+  const d = await api('geo/city', { body: { name: pl.city, state: pl.state || '', lat: pl.lat, lng: pl.lng } });
+  return d.city;
+}
+async function reversePlace(lat, lng) {
+  try { const d = await api('geo/reverse', { params: { lat, lng } }); return d.place; } catch (e) { return null; }
+}
+
 async function pickCity() {
   const m = await meta();
-  const box = sheet('<h3>Choose city</h3><button class="btn o blk" id="useLoc" style="margin-bottom:10px">' + icon('gps') + ' Use my current location</button>' +
+  const box = sheet('<h3>Choose your location</h3>' +
+    '<div class="sbox">' + icon('search') + '<input class="inp" id="plq" placeholder="Search city, area or locality" autocomplete="off"></div>' +
+    '<button class="btn o blk" id="useLoc" style="margin:10px 0">' + icon('gps') + ' Use my current location</button>' +
+    '<div class="muted" style="margin:4px 0 6px;font-size:12px;font-weight:600">POPULAR CITIES</div>' +
     m.cities.map(c => '<div class="li" data-city="' + c.id + '"><span>' + esc(c.name) + '<br><small class="muted">' + esc(c.state) + '</small></span>' + (cityId() == c.id ? icon('check') : '') + '</div>').join(''));
+  const choose = async (pl, fromGps) => {
+    if (!pl || !pl.city) return toast('Could not find the city for this place');
+    try {
+      const c = await cityFor(pl);
+      setCity(c); S.meta = null;
+      S.loc = { lat: +pl.lat, lng: +pl.lng, t: Date.now(), label: pl.label }; store.set('loc', S.loc);
+      closeSheet(); route();
+      if (!fromGps) toast(pl.label + (pl.city && pl.city !== pl.label ? ', ' + pl.city : ''));
+    } catch (e) { toast(e.message); }
+  };
+  placeSearch(box.querySelector('#plq'), pl => choose(pl));
   box.querySelector('#useLoc').onclick = async () => {
     toast('Getting your location…');
     const l = await getLocation(true);
     if (!l) return toast('Location not available — turn on GPS');
-    let best = null, bd = 1e9;
+    const pl = await reversePlace(l.lat, l.lng);
+    if (pl && pl.city) return choose(pl, true);
+    let best = null, bd = 1e9;   // offline fallback: nearest listed city
     m.cities.forEach(c => { if (!c.lat) return; const d = Math.hypot(c.lat - l.lat, c.lng - l.lng); if (d < bd) { bd = d; best = c; } });
     if (best) setCity(best);
     closeSheet(); route();
@@ -772,7 +832,8 @@ async function screenOwnerEdit(p) {
   if (OWNER === null) await loadOwner().catch(() => {});
   const s = OWNER || {};
   const isNew = !OWNER;
-  const D = Object.assign({ name: '', owner_name: S.user && S.user.name || '', mobile: S.user ? S.user.mobile : '', whatsapp: '', gstin: '', shop_type: 'Retail', is_service: false, address: '', area: '', pincode: '', city_id: cityId(), lat: null, lng: null, open_time_24: '09:00', close_time_24: '21:00', weekly_off: '' }, s);
+  const D = Object.assign({ name: '', owner_name: S.user && S.user.name || '', mobile: S.user ? S.user.mobile : '', whatsapp: '', gstin: '', shop_type: 'Retail', is_service: false, address: '', area: '', pincode: '', city_id: cityId(), city_name: '', city_state: '', lat: null, lng: null, open_time_24: '09:00', close_time_24: '21:00', weekly_off: '' }, s);
+  if (!D.city_name) { const c0 = m.cities.find(x => x.id == D.city_id); D.city_name = s.city || s.city_name || (c0 ? c0.name : ''); D.city_state = c0 ? c0.state : ''; }
   D.cats = (s.categories || []).map(c => c.id); D.brs = (s.brands || []).map(b => b.id); D.prods = (s.products || []).map(x => x.id);
   if (store.get('draft')) Object.assign(D, store.get('draft'));
   const title = isNew ? 'List your shop' : 'Edit shop';
@@ -786,8 +847,8 @@ async function screenOwnerEdit(p) {
   if (step === 3) body = '<label class="l">Categories</label><div class="chips wrapc" id="cats">' + m.categories.map(c => '<button class="chip ' + (D.cats.includes(+c.id) ? 'on' : '') + '" data-id="' + c.id + '">' + esc(c.name) + '</button>').join('') + '</div>' +
     '<label class="l">Brands you sell</label><div class="chips wrapc" id="brs">' + m.brands.map(b => '<button class="chip ' + (D.brs.includes(+b.id) ? 'on' : '') + '" data-id="' + b.id + '">' + esc(b.name) + '</button>').join('') + '</div>' +
     '<label class="l">Popular products you stock</label><div class="chips wrapc" id="prs">' + loading() + '</div>';
-  if (step === 4) body = '<label class="l">Location</label><div class="minimap" id="mm"></div><button class="btn sm o" id="gps" style="margin-top:8px">' + icon('gps') + ' Use my current location</button> <span class="muted" id="ll">' + (D.lat ? 'Pin set ✓' : 'Drag the pin to your shop') + '</span>' +
-    '<label class="l">City</label><select class="inp" id="city_id">' + m.cities.map(c => '<option value="' + c.id + '"' + (D.city_id == c.id ? ' selected' : '') + '>' + esc(c.name) + '</option>').join('') + '</select>' +
+  if (step === 4) body = '<label class="l">Search shop location</label><div class="sbox">' + icon('search') + '<input class="inp" id="plq" placeholder="Type shop area, market or landmark" autocomplete="off"></div><div class="minimap" id="mm" style="margin-top:8px"></div><button class="btn sm o" id="gps" style="margin-top:8px">' + icon('gps') + ' Use my current location</button> <span class="muted" id="ll">' + (D.lat ? 'Pin set ✓' : 'Drag the pin to your shop') + '</span>' +
+    '<label class="l">City</label><input class="inp" id="city_name" value="' + esc(D.city_name || '') + '" placeholder="Type your city" autocomplete="off">' +
     '<label class="l">Area / locality <span class="muted" style="font-weight:400">(optional)</span></label><input class="inp" id="area" value="' + esc(D.area || '') + '" placeholder="e.g. GN Street, T. Nagar">' +
     '<label class="l">Full address</label><input class="inp" id="address" value="' + esc(D.address || '') + '" placeholder="e.g. No. 222, GN Street">' +
     '<label class="l">Pincode</label><input class="inp" id="pincode" inputmode="numeric" maxlength="6" value="' + esc(D.pincode || '') + '">' +
@@ -809,16 +870,30 @@ async function screenOwnerEdit(p) {
     const map = L.map('mm', { zoomControl: false }).setView(start, D.lat || S.loc ? 16 : 12);
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 }).addTo(map);
     const mk = L.marker(start, { draggable: true, icon: L.divIcon({ className: '', html: '<div class="pin"></div>', iconSize: [30, 30], iconAnchor: [15, 30] }) }).addTo(map);
-    let cityTouched = !!(OWNER && OWNER.city_id);
-    document.getElementById('city_id').addEventListener('change', () => { cityTouched = true; });
-    const setLL = ll => {
-      D.lat = +ll.lat.toFixed(7); D.lng = +ll.lng.toFixed(7); document.getElementById('ll').textContent = 'Pin set ✓';
-      if (!cityTouched) {   // pick the nearest city to the pin
-        let best = null, bd = 1e9;
-        m.cities.forEach(c => { if (!c.lat) return; const d = Math.hypot(c.lat - D.lat, (c.lng - D.lng) * Math.cos(D.lat * Math.PI / 180)); if (d < bd) { bd = d; best = c; } });
-        if (best && bd < 0.6) { document.getElementById('city_id').value = best.id; D.city_id = best.id; }
-      }
+    let cityTouched = !!(OWNER && OWNER.city_id), revSeq = 0;
+    const cityIn = document.getElementById('city_name');
+    const fillFrom = (pl, force) => {   // fill city / area / address / pincode from a place
+      if (!pl) return;
+      if (pl.city && (force || !cityTouched)) { cityIn.value = pl.city; D.city_name = pl.city; D.city_state = pl.state || ''; D.city_id = null; }
+      const area = document.getElementById('area'), adr = document.getElementById('address'), pin = document.getElementById('pincode');
+      const ar = pl.area && pl.area !== pl.city ? pl.area : (pl.name && pl.name !== pl.city ? pl.name : '');
+      if (ar && (force || !area.value.trim())) area.value = ar;
+      const ad = [pl.name !== ar ? pl.name : '', pl.street].filter(Boolean).join(', ');
+      if (ad && (force || !adr.value.trim())) adr.value = ad;
+      if (pl.pincode && (force || !pin.value.trim())) pin.value = pl.pincode;
     };
+    const setLL = (ll, noLookup) => {
+      D.lat = +(+ll.lat).toFixed(7); D.lng = +(+ll.lng).toFixed(7); document.getElementById('ll').textContent = 'Pin set ✓';
+      if (noLookup) return;
+      const my = ++revSeq;
+      reversePlace(D.lat, D.lng).then(pl => { if (my === revSeq && document.getElementById('city_name')) fillFrom(pl, false); });
+    };
+    placeSearch(cityIn, pl => { cityIn.value = pl.city; D.city_name = pl.city; D.city_state = pl.state || ''; D.city_id = null; cityTouched = true; }, { citiesOnly: true, onType: v => { cityTouched = true; D.city_name = v; D.city_state = ''; D.city_id = null; } });
+    placeSearch(document.getElementById('plq'), pl => {
+      mk.setLatLng([pl.lat, pl.lng]); map.setView([pl.lat, pl.lng], 17); setLL({ lat: pl.lat, lng: pl.lng }, true);
+      fillFrom(pl, true); cityTouched = false;
+      toast('Pin placed — drag it to the exact shop spot');
+    }, { prefix: () => '' });
     mk.on('dragend', () => setLL(mk.getLatLng()));
     map.on('click', e => { mk.setLatLng(e.latlng); setLL(e.latlng); });
     document.getElementById('gps').onclick = async () => { toast('Getting location…'); const l = await getLocation(true); if (!l) return toast('Turn on GPS / location'); mk.setLatLng([l.lat, l.lng]); map.setView([l.lat, l.lng], 17); setLL({ lat: l.lat, lng: l.lng }); };
@@ -833,7 +908,7 @@ async function screenOwnerEdit(p) {
   }
   const collect = () => {
     if (step === 2) ['name', 'owner_name', 'mobile', 'gstin'].forEach(k => D[k] = document.getElementById(k).value.trim());
-    if (step === 4) ['area', 'address', 'pincode', 'open_time', 'close_time', 'weekly_off', 'city_id'].forEach(k => { const v = document.getElementById(k).value.trim(); if (k === 'open_time' || k === 'close_time') D[k + '_24'] = v; else D[k] = v; });
+    if (step === 4) ['area', 'address', 'pincode', 'open_time', 'close_time', 'weekly_off', 'city_name'].forEach(k => { const v = document.getElementById(k).value.trim(); if (k === 'open_time' || k === 'close_time') D[k + '_24'] = v; else D[k] = v; });
     saveDraft();
   };
   const pb = document.getElementById('prev'); if (pb) pb.onclick = () => { collect(); if (!navBack()) go('#/owner/edit?step=' + (step - 1), true); };
@@ -844,7 +919,12 @@ async function screenOwnerEdit(p) {
     if (step === 3 && !D.cats.length) return fieldError('cats', 'Pick at least one category');
     if (step < 4 && isNew) return go('#/owner/edit?step=' + (step + 1));
     if (step === 4 && !D.lat) return fieldError('mm', 'Set your shop location: tap "Use my current location" or tap the map');
-    if (step === 4 && !D.area) { const c = m.cities.find(x => x.id == D.city_id); D.area = c ? c.name : ''; }
+    if (step === 4 && !D.city_name) return fieldError('city_name', 'Enter your city');
+    if (step === 4) {
+      try { const c = await cityFor({ city: D.city_name, state: D.city_state, lat: D.lat, lng: D.lng }); D.city_id = c.id; D.city_name = c.name; S.meta = null; }
+      catch (e) { return fieldError('city_name', e.message); }
+      if (!D.area) D.area = D.city_name;
+    }
     // save
     try {
       await api('owner/shop/save', { body: { name: D.name, owner_name: D.owner_name, mobile: D.mobile, whatsapp: D.mobile, gstin: D.gstin, shop_type: D.shop_type, is_service: D.is_service ? 1 : 0, city_id: D.city_id, area: D.area, address: D.address, pincode: D.pincode, lat: D.lat, lng: D.lng, open_time: D.open_time_24, close_time: D.close_time_24, weekly_off: D.weekly_off, categories: D.cats, brands: D.brs, products: D.prods } });

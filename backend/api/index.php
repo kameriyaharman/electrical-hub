@@ -31,6 +31,45 @@ function auth_user($required = true) {
     return $u;
 }
 
+function geo_get($url) {
+    $dir = sys_get_temp_dir() . '/eh_geo'; if (!is_dir($dir)) @mkdir($dir, 0775, true);
+    $f = $dir . '/' . md5($url) . '.json';
+    if (is_file($f) && filemtime($f) > time() - 7 * 86400) return json_decode(file_get_contents($f), true);
+    $ctx = stream_context_create(['http' => ['timeout' => 6, 'ignore_errors' => true,
+        'header' => "User-Agent: ElectricalMarketHub/1.0 (" . (setting('support_email') ?: 'support@electricalhub.in') . ")\r\nAccept-Language: en\r\n"]]);
+    $raw = @file_get_contents($url, false, $ctx);
+    $js = $raw ? json_decode($raw, true) : null;
+    if (is_array($js)) @file_put_contents($f, $raw);
+    return $js;
+}
+function place_out($name, $street, $area, $city, $state, $pin, $lat, $lng) {
+    $city = trim((string)$city); $state = trim((string)$state);
+    $area = trim((string)$area); $name = trim((string)$name);
+    $label = $name ?: ($area ?: $city);
+    if (!$label) return null;
+    $sub = implode(', ', array_values(array_unique(array_filter([$street, $area !== $label ? $area : '', $city !== $label ? $city : '', $state]))));
+    return ['label' => $label, 'sub' => $sub, 'name' => $name, 'street' => trim((string)$street), 'area' => $area, 'city' => $city, 'state' => $state,
+        'pincode' => preg_match('/^\d{6}$/', (string)$pin) ? (string)$pin : '', 'lat' => (float)$lat, 'lng' => (float)$lng];
+}
+function photon_place($f) {
+    $p = $f['properties'] ?? []; $c = $f['geometry']['coordinates'] ?? null;
+    if (!$c || (($p['countrycode'] ?? 'IN') !== 'IN')) return null;
+    $type = $p['type'] ?? ''; $isCity = in_array($type, ['city', 'town', 'village']) || in_array($p['osm_value'] ?? '', ['city', 'town', 'village']);
+    $city = $p['city'] ?? ($isCity ? ($p['name'] ?? '') : ($p['county'] ?? ($p['district'] ?? '')));
+    $area = $p['district'] ?? ($p['locality'] ?? '');
+    $street = trim(($p['housenumber'] ?? '') . ' ' . ($p['street'] ?? ''));
+    return place_out($p['name'] ?? '', $street, $area, $city, $p['state'] ?? '', $p['postcode'] ?? '', $c[1], $c[0]);
+}
+function nominatim_place($r) {
+    $a = $r['address'] ?? [];
+    if (($a['country_code'] ?? 'in') !== 'in') return null;
+    $city = $a['city'] ?? $a['town'] ?? $a['village'] ?? $a['municipality'] ?? $a['county'] ?? $a['state_district'] ?? '';
+    $area = $a['suburb'] ?? $a['neighbourhood'] ?? $a['quarter'] ?? $a['city_district'] ?? '';
+    $street = trim(($a['house_number'] ?? '') . ' ' . ($a['road'] ?? ''));
+    $name = $r['name'] ?? '';
+    return place_out($name ?: ($area ?: $city), $street, $area, $city, $a['state'] ?? '', $a['postcode'] ?? '', $r['lat'] ?? 0, $r['lon'] ?? 0);
+}
+
 function shop_card($s, $lat = null, $lng = null) {
     $photo = val("SELECT path FROM shop_photos WHERE shop_id = ? ORDER BY (label = 'Shop front') DESC, id LIMIT 1", [$s['id']]);
     $card = [
@@ -236,6 +275,51 @@ try {
         $city = (int)in('city_id', $u['city_id']);
         q("UPDATE users SET name = ?, city_id = ? WHERE id = ?", [$name, $city, $u['id']]);
         out(['ok' => true]);
+
+    // ---------- Place search (free OpenStreetMap geocoding, cached) ----------
+    case 'geo/search':
+        $qq = trim((string)in('q'));
+        if (mb_strlen($qq) < 2) out(['ok' => true, 'places' => []]);
+        $lat = in('lat'); $lng = in('lng');
+        $url = 'https://photon.komoot.io/api/?' . http_build_query(['q' => $qq, 'limit' => 8, 'lang' => 'en', 'bbox' => '68.0,6.5,97.5,37.5']
+            + ($lat ? ['lat' => round((float)$lat, 2), 'lon' => round((float)$lng, 2)] : []));
+        $js = geo_get($url);
+        $places = [];
+        foreach (($js['features'] ?? []) as $f) { $pl = photon_place($f); if ($pl) $places[$pl['label']] = $pl; }
+        if (!$places) {   // fallback: Nominatim
+            $js = geo_get('https://nominatim.openstreetmap.org/search?' . http_build_query(['q' => $qq, 'format' => 'jsonv2', 'addressdetails' => 1, 'limit' => 8, 'countrycodes' => 'in']));
+            foreach ((array)$js as $r) { $pl = nominatim_place($r); if ($pl) $places[$pl['label']] = $pl; }
+        }
+        out(['ok' => true, 'places' => array_values($places)]);
+
+    case 'geo/reverse':
+        $lat = (float)in('lat'); $lng = (float)in('lng');
+        if (!$lat || !$lng) fail('Location missing');
+        $js = geo_get('https://photon.komoot.io/reverse?' . http_build_query(['lat' => round($lat, 5), 'lon' => round($lng, 5), 'lang' => 'en']));
+        $pl = isset($js['features'][0]) ? photon_place($js['features'][0]) : null;
+        if (!$pl || !$pl['city']) {
+            $r = geo_get('https://nominatim.openstreetmap.org/reverse?' . http_build_query(['lat' => $lat, 'lon' => $lng, 'format' => 'jsonv2', 'addressdetails' => 1, 'zoom' => 18]));
+            if ($r && empty($r['error'])) $pl = nominatim_place($r) ?: $pl;
+        }
+        if (!$pl) fail('Could not find this place');
+        $pl['lat'] = $lat; $pl['lng'] = $lng;
+        out(['ok' => true, 'place' => $pl]);
+
+    case 'geo/city':   // find or create a city so any place in India can be used
+        $name = trim(preg_replace('/\s+/', ' ', (string)in('name')));
+        $state = trim((string)in('state'));
+        if (mb_strlen($name) < 2 || mb_strlen($name) > 100) fail('Enter a valid city');
+        $c = one("SELECT id, name, state, lat, lng FROM cities WHERE LOWER(name) = LOWER(?) AND (? = '' OR state = '' OR LOWER(state) = LOWER(?)) ORDER BY active DESC, id LIMIT 1", [$name, $state, $state]);
+        if ($c) {
+            if ($c['lat'] === null && in('lat')) q("UPDATE cities SET lat = ?, lng = ? WHERE id = ?", [(float)in('lat'), (float)in('lng'), $c['id']]);
+            if ($state && $c['state'] === '') q("UPDATE cities SET state = ? WHERE id = ?", [$state, $c['id']]);
+        } else {
+            q("INSERT INTO cities (name, state, lat, lng, active) VALUES (?, ?, ?, ?, 1)", [$name, $state, in('lat') ? (float)in('lat') : null, in('lng') ? (float)in('lng') : null]);
+            $id = (int)db()->lastInsertId();
+            $c = one("SELECT id, name, state, lat, lng FROM cities WHERE id = ?", [$id]);
+            error_log('[APPLOG] new city ' . $name . ', ' . $state);
+        }
+        out(['ok' => true, 'city' => ['id' => (int)$c['id'], 'name' => $c['name'], 'state' => $c['state'], 'lat' => $c['lat'] !== null ? (float)$c['lat'] : null, 'lng' => $c['lng'] !== null ? (float)$c['lng'] : null]]);
 
     // ---------- Catalogue ----------
     case 'meta':
