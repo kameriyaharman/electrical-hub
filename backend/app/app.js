@@ -17,6 +17,20 @@ const S = { token: store.get('token', ''), user: store.get('user', null), city: 
 const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const inr = n => '₹' + Number(n || 0).toLocaleString('en-IN');
 const qs = o => Object.entries(o).filter(([, v]) => v !== undefined && v !== null && v !== '' && v !== false).map(([k, v]) => encodeURIComponent(k) + '=' + encodeURIComponent(v)).join('&');
+/** Show a validation problem right at the field: red border, message under it, scrolled into view. */
+function fieldError(id, msg) {
+  const el = document.getElementById(id);
+  toast(msg, 3500);
+  if (!el) return;
+  el.classList.add('bad');
+  const m = document.createElement('div'); m.className = 'ferr'; m.textContent = msg;
+  el.insertAdjacentElement('afterend', m);
+  el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  if (el.tagName === 'INPUT') setTimeout(() => el.focus(), 300);
+  const clear = () => { el.classList.remove('bad'); m.remove(); };
+  el.addEventListener('input', clear, { once: true }); el.addEventListener('click', clear, { once: true });
+}
+function clearFieldErrors() { document.querySelectorAll('.ferr').forEach(x => x.remove()); document.querySelectorAll('.bad').forEach(x => x.classList.remove('bad')); }
 function toast(msg, ms) { const t = document.getElementById('toast'); t.textContent = msg; t.classList.add('show'); clearTimeout(t._h); t._h = setTimeout(() => t.classList.remove('show'), ms || 2600); }
 // ---------- navigation: our own screen stack (reliable Android back button) ----------
 const TABS = ['#/home', '#/shops', '#/products', '#/offers', '#/account'];
@@ -205,7 +219,7 @@ new MutationObserver(() => { if (BIND_PENDING) return; BIND_PENDING = true; Prom
 // Lightweight remote log (errors + screen changes) so problems on real phones show up in the server logs
 function rlog(type, msg) {
   try {
-    const body = JSON.stringify({ type, msg: String(msg).slice(0, 300), hash: location.hash, app: NATIVE ? 'android' : 'web', v: '1.9' });
+    const body = JSON.stringify({ type, msg: String(msg).slice(0, 300), hash: location.hash, app: NATIVE ? 'android' : 'web', v: '1.10' });
     if (navigator.sendBeacon) navigator.sendBeacon(API + '?r=log', new Blob([body], { type: 'text/plain' }));
     else fetch(API + '?r=log', { method: 'POST', body }).catch(() => {});
   } catch (e) {}
@@ -365,7 +379,7 @@ async function screenHome() {
     h += '<div class="own" data-href="#/owner">' + icon('store') + '<div><b>Own an electrical shop?</b><small>Get listed free & get customer calls</small></div></div>';
     document.getElementById('body').innerHTML = h;
     const c2 = document.getElementById('chg2'); if (c2) c2.onclick = e => { e.preventDefault(); pickCity(); };
-    startSlider();
+    startSlider(); startCatScroll();
   } catch (e) { document.getElementById('body').innerHTML = '<div class="empty">' + esc(e.message) + '<br><br><button class="btn sm" onclick="location.reload()">Retry</button></div>'; }
 }
 
@@ -399,6 +413,24 @@ function startSlider() {
     if (v && !v.paused && !v.ended) return;   // let the video finish, then 'ended' moves on
     advance();
   }, 3000);
+}
+
+// Home categories: 2-row strip that keeps sliding sideways (pauses while touched, loops back to start)
+let CATS = null;
+function startCatScroll() {
+  if (CATS) clearInterval(CATS);
+  const el = document.querySelector('.cats');
+  if (!el || el.scrollWidth <= el.clientWidth + 10) return;
+  let hold = false;
+  el.addEventListener('touchstart', () => { hold = true; }, { passive: true });
+  el.addEventListener('touchend', () => { setTimeout(() => { hold = false; }, 2500); }, { passive: true });
+  CATS = setInterval(() => {
+    if (!document.body.contains(el)) { clearInterval(CATS); CATS = null; return; }
+    if (hold || document.hidden) return;
+    const col = (el.querySelector('.cat') || {}).offsetWidth || 90;
+    const atEnd = el.scrollLeft + el.clientWidth >= el.scrollWidth - 4;
+    el.scrollTo({ left: atEnd ? 0 : el.scrollLeft + col + 12, behavior: 'smooth' });
+  }, 2500);
 }
 
 // ---------- Shops list ----------
@@ -609,7 +641,7 @@ async function screenAccount() {
       (d.has_shop ? li('store', 'My shop dashboard', '', '#/owner') : li('store', 'List your shop (free)', '', '#/owner')) + li('help', 'Help & support', '', 'help') + li('file', 'Privacy policy', '', 'privacy') + li('logout', 'Logout', '', 'logout') +
       li('x', 'Delete my account', '', 'delacc') + '</div>' +
       (d.has_shop ? '' : '<div class="own" data-href="#/owner">' + icon('store') + '<div><b>Own an electrical shop?</b><small>Get listed free & get customer calls</small></div></div>') +
-      '<p class="muted" style="text-align:center">Electrical Market Hub v1.9</p>';
+      '<p class="muted" style="text-align:center">Electrical Market Hub v1.10</p>';
     bindAccount();
     document.getElementById('ed').onclick = () => {
       const box = sheet('<h3>Your name</h3><input class="inp" id="nm" value="' + esc(d.user.name || '') + '"><button class="btn blk" id="sv" style="margin-top:12px">Save</button>');
@@ -746,7 +778,7 @@ async function screenOwnerEdit(p) {
   const title = isNew ? 'List your shop' : 'Edit shop';
   const stepper = '<div class="steps">' + [1, 2, 3, 4].map(i => '<i class="' + (i <= step ? 'on' : '') + '"></i>').join('') + '</div><div class="muted" style="margin-bottom:6px">Step ' + step + ' of 4 · ' + ['', 'Mobile', 'Shop details', 'Categories & brands', 'Location & timings'][step] + '</div>';
   let body = '';
-  if (step === 2) body = '<label class="l">Shop name</label><input class="inp" id="name" value="' + esc(D.name) + '" placeholder="KK Electrical">' +
+  if (step === 2) body = '<label class="l">Shop name</label><input class="inp" id="name" value="' + esc(D.name) + '" placeholder="e.g. KK Electrical">' +
     '<label class="l">Owner name</label><input class="inp" id="owner_name" value="' + esc(D.owner_name) + '">' +
     '<label class="l">Mobile / WhatsApp</label><input class="inp" id="mobile" type="tel" maxlength="10" value="' + esc(D.mobile) + '">' +
     '<label class="l">GSTIN (optional)</label><input class="inp" id="gstin" value="' + esc(D.gstin || '') + '" placeholder="33AAxxxxx1Z5" style="text-transform:uppercase">' +
@@ -756,8 +788,8 @@ async function screenOwnerEdit(p) {
     '<label class="l">Popular products you stock</label><div class="chips wrapc" id="prs">' + loading() + '</div>';
   if (step === 4) body = '<label class="l">Location</label><div class="minimap" id="mm"></div><button class="btn sm o" id="gps" style="margin-top:8px">' + icon('gps') + ' Use my current location</button> <span class="muted" id="ll">' + (D.lat ? 'Pin set ✓' : 'Drag the pin to your shop') + '</span>' +
     '<label class="l">City</label><select class="inp" id="city_id">' + m.cities.map(c => '<option value="' + c.id + '"' + (D.city_id == c.id ? ' selected' : '') + '>' + esc(c.name) + '</option>').join('') + '</select>' +
-    '<label class="l">Area</label><input class="inp" id="area" value="' + esc(D.area || '') + '" placeholder="GN Street">' +
-    '<label class="l">Full address</label><input class="inp" id="address" value="' + esc(D.address || '') + '" placeholder="No. 222, GN Street">' +
+    '<label class="l">Area</label><input class="inp" id="area" value="' + esc(D.area || '') + '" placeholder="e.g. GN Street, T. Nagar">' +
+    '<label class="l">Full address</label><input class="inp" id="address" value="' + esc(D.address || '') + '" placeholder="e.g. No. 222, GN Street">' +
     '<label class="l">Pincode</label><input class="inp" id="pincode" inputmode="numeric" maxlength="6" value="' + esc(D.pincode || '') + '">' +
     '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px"><div><label class="l">Opens</label><input class="inp" type="time" id="open_time" value="' + esc(D.open_time_24) + '"></div><div><label class="l">Closes</label><input class="inp" type="time" id="close_time" value="' + esc(D.close_time_24) + '"></div><div><label class="l">Weekly off</label><select class="inp" id="weekly_off"><option value="">None</option>' + ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(d => '<option' + (D.weekly_off === d ? ' selected' : '') + '>' + d + '</option>').join('') + '</select></div></div>';
   render('<div class="scr nonav">' + hd(title) + '<div class="wrap">' + stepper + body + '</div><div class="foot">' + (step > 2 ? '<button class="btn o" id="prev" style="flex:1">Back</button>' : '') + '<button class="btn" id="next" style="flex:2">' + (step < 4 ? 'Next' : (isNew || !s.photos || !s.photos.length ? 'Next: Upload photos' : 'Save')) + '</button></div></div>');
@@ -791,11 +823,12 @@ async function screenOwnerEdit(p) {
   const pb = document.getElementById('prev'); if (pb) pb.onclick = () => { collect(); if (!navBack()) go('#/owner/edit?step=' + (step - 1), true); };
   document.getElementById('next').onclick = async () => {
     collect();
-    if (step === 2) { if (!D.name) return toast('Enter shop name'); if (!/^\d{10}$/.test(D.mobile)) return toast('Enter 10-digit mobile'); }
-    if (step === 3 && !D.cats.length) return toast('Pick at least one category');
+    clearFieldErrors();
+    if (step === 2) { if (!D.name) return fieldError('name', 'Enter your shop name'); if (!/^\d{10}$/.test(D.mobile)) return fieldError('mobile', 'Enter a 10-digit mobile number'); }
+    if (step === 3 && !D.cats.length) return fieldError('cats', 'Pick at least one category');
     if (step < 4 && isNew) return go('#/owner/edit?step=' + (step + 1));
-    if (step === 4 && !D.lat) return toast('Set your shop location on the map');
-    if (step === 4 && !D.area) return toast('Enter your area');
+    if (step === 4 && !D.lat) return fieldError('mm', 'Set your shop location: tap "Use my current location" or tap the map');
+    if (step === 4 && !D.area) return fieldError('area', 'Enter your area / locality (e.g. GN Street)');
     // save
     try {
       await api('owner/shop/save', { body: { name: D.name, owner_name: D.owner_name, mobile: D.mobile, whatsapp: D.mobile, gstin: D.gstin, shop_type: D.shop_type, is_service: D.is_service ? 1 : 0, city_id: D.city_id, area: D.area, address: D.address, pincode: D.pincode, lat: D.lat, lng: D.lng, open_time: D.open_time_24, close_time: D.close_time_24, weekly_off: D.weekly_off, categories: D.cats, brands: D.brs, products: D.prods } });
@@ -940,6 +973,7 @@ function parse() {
   return { parts: path.split('/').filter(Boolean), params };
 }
 function route() {
+  if (CATS) { clearInterval(CATS); CATS = null; }
   LAST_ROUTED = curHash();
   rlog('route', curHash());
   stopSlider();
