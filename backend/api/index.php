@@ -36,7 +36,7 @@ function geo_get($url) {
     $f = $dir . '/' . md5($url) . '.json';
     if (is_file($f) && filemtime($f) > time() - 7 * 86400) return json_decode(file_get_contents($f), true);
     $ctx = stream_context_create(['http' => ['timeout' => 6, 'ignore_errors' => true,
-        'header' => "User-Agent: ElectricalMarketHub/1.0 (" . (setting('support_email') ?: 'support@electricalhub.in') . ")\r\nAccept-Language: en\r\n"]]);
+        'header' => "User-Agent: ElectricalMarketHub/1.0 (" . (setting('support_email') ?: 'electricmarkethub@gmail.com') . ")\r\nAccept-Language: en\r\n"]]);
     $raw = @file_get_contents($url, false, $ctx);
     $js = $raw ? json_decode($raw, true) : null;
     if (is_array($js)) @file_put_contents($f, $raw);

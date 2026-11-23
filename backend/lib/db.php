@@ -50,6 +50,9 @@ function migrate($pdo) {
     ];
     // App renamed: Electrical Hub -> Electrical Market Hub
     $pdo->exec("UPDATE settings SET v = 'Electrical Market Hub' WHERE k = 'app_name' AND v = 'Electrical Hub'");
+    // client's support contacts (replace the old placeholder values once; later edits in admin are kept)
+    $pdo->exec("UPDATE settings SET v = 'electricmarkethub@gmail.com' WHERE k = 'support_email' AND v = 'support@electricalhub.in'");
+    $pdo->exec("UPDATE settings SET v = '9043561113' WHERE k IN ('support_phone', 'support_whatsapp') AND v = '9220892667'");
     foreach ($want as $table => $cols) {
         $have = array_column($pdo->query("SHOW COLUMNS FROM `$table`")->fetchAll(PDO::FETCH_ASSOC), 'Field');
         foreach ($cols as $c => $def) if (!in_array($c, $have, true)) $pdo->exec("ALTER TABLE `$table` ADD COLUMN `$c` $def");

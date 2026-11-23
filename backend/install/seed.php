@@ -9,9 +9,9 @@ function seed_database($pdo) {
 
     $settings = [
         'app_name' => 'Electrical Market Hub',
-        'support_phone' => '9220892667',
-        'support_whatsapp' => '9220892667',
-        'support_email' => 'support@electricalhub.in',
+        'support_phone' => '9043561113',
+        'support_whatsapp' => '9043561113',
+        'support_email' => 'electricmarkethub@gmail.com',
         'upi_id' => 'electricalhub@upi',
         'otp_mode' => 'demo',            // demo = OTP shown in app; msg91 = real SMS
         'msg91_authkey' => '',
