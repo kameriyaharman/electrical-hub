@@ -1,15 +1,12 @@
 <?php
 /** Public privacy policy page (linked from Google Play and the app). */
-require __DIR__ . '/lib/db.php';
+require __DIR__ . '/lib/site.php';
 $app = setting('app_name', 'Electrical Market Hub');
 $email = setting('support_email');
 $phone = setting('support_phone');
 $updated = '18 November 2026';
-?><!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Privacy Policy · <?= h($app) ?></title>
-<style>body{font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;background:#F6F4F2;color:#141414;margin:0;line-height:1.65}.w{max-width:760px;margin:0 auto;padding:24px 18px 50px}
-h1{font-size:26px;margin:8px 0 4px}h2{font-size:17px;margin:26px 0 6px}p,li{font-size:15px;color:#2d2a27}.top{background:#121212;color:#fff}.top .w{padding:16px 18px;font-weight:700}.top b{color:#FF7A00}small{color:#77706A}</style></head>
-<body><div class="top"><div class="w">⚡ Electrical Market <b>Hub</b></div></div><div class="w">
+?><?php site_head('Privacy Policy'); ?>
+<div class="w nr doc">
 <h1>Privacy Policy</h1><small>Last updated: <?= $updated ?></small>
 
 <p><?= h($app) ?> ("we", "us") is an app that helps people find electrical shops, products and offers near them, and helps shop owners list their shops. This policy explains what information the app collects, why, and the choices you have.</p>
@@ -43,7 +40,7 @@ h1{font-size:26px;margin:8px 0 4px}h2{font-size:17px;margin:26px 0 6px}p,li{font
 </ul>
 
 <h2>4. Data retention and deletion</h2>
-<p>We keep your information while your account is active. You can delete your account and its data at any time in the app (<b>Account → Delete my account</b>) or on our <a href="delete-account.php">account deletion page</a>. Deletion removes your profile, PIN, saved shops, reviews, quote requests and — for shop owners — the shop listing, photos and offers. Anonymous usage counts may be kept without your identity.</p>
+<p>We keep your information while your account is active. You can delete your account and its data at any time in the app (<b>Account → Delete my account</b>) or on our <a href="/delete-account.php">account deletion page</a>. Deletion removes your profile, PIN, saved shops, reviews, quote requests and — for shop owners — the shop listing, photos and offers. Anonymous usage counts may be kept without your identity.</p>
 
 <h2>5. Security</h2>
 <p>Data is sent over encrypted connections (HTTPS). PINs are stored only as secure hashes. Access to the admin panel is restricted to authorised staff.</p>
@@ -56,4 +53,5 @@ h1{font-size:26px;margin:8px 0 4px}h2{font-size:17px;margin:26px 0 6px}p,li{font
 
 <h2>8. Contact</h2>
 <p>For any privacy question or request, contact us<?= $email ? ' at <a href="mailto:' . h($email) . '">' . h($email) . '</a>' : '' ?><?= $phone ? ' or +91 ' . h($phone) : '' ?>.</p>
-</div></body></html>
+</div>
+<?php site_foot();
