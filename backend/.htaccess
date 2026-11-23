@@ -3,7 +3,7 @@ DirectoryIndex index.php index.html
 <IfModule mod_rewrite.c>
 RewriteEngine On
 RewriteRule ^(lib|install)/ - [F,L]
-RewriteRule ^config\.php$ - [F,L]
+RewriteRule ^config(\.local)?\.php$ - [F,L]
 RewriteCond %{HTTP:Authorization} .
 RewriteRule .* - [E=HTTP_AUTHORIZATION:%{HTTP:Authorization}]
 </IfModule>

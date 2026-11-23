@@ -7,6 +7,10 @@
  * with the MySQL database / user / password you create in cPanel.
  */
 
+// Server-only overrides (DB password etc.) live in config.local.php, which is not in git,
+// so pulling updates from GitHub never overwrites them.
+if (is_file(__DIR__ . '/config.local.php')) require __DIR__ . '/config.local.php';
+
 function env_or($keys, $default) {
     foreach ((array)$keys as $k) {
         $v = getenv($k);
