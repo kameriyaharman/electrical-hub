@@ -63,4 +63,41 @@ section{padding:60px 0}section h2{font-size:30px;margin:0 0 8px;text-align:cente
     <?php if ($s['email']): ?><a class="card" href="mailto:<?= h($s['email']) ?>"><div class="ic">✉️</div><h3>Email</h3><p><?= h($s['email']) ?></p></a><?php endif; ?>
   </div>
 </div></section>
+<!-- First-visit choice: Android app or continue in the browser -->
+<style>
+.ch-bg{position:fixed;inset:0;background:#000a;z-index:50;display:none;align-items:flex-end;justify-content:center}
+.ch-bg.show{display:flex}
+.ch{background:#fff;width:100%;max-width:440px;border-radius:22px 22px 0 0;padding:26px 22px 22px;text-align:center;animation:up .25s ease-out}
+@media(min-width:600px){.ch-bg{align-items:center}.ch{border-radius:22px}}
+@keyframes up{from{transform:translateY(40px);opacity:0}to{transform:none;opacity:1}}
+.ch img{width:64px;height:64px;border-radius:16px}.ch h3{margin:10px 0 4px;font-size:21px}.ch p{margin:0 0 20px;color:var(--mut);font-size:15px}
+.ch a{display:flex;align-items:center;justify-content:center;gap:10px;text-decoration:none;font-weight:700;font-size:16px;padding:15px;border-radius:14px;margin-top:10px}
+.ch .ap{background:var(--o);color:#fff}.ch .wb{background:#fff;color:#141414;border:2px solid var(--line)}
+.ch .x{display:inline-block;margin-top:14px;color:var(--mut);font-size:14px;background:none;border:0;cursor:pointer}
+</style>
+<div class="ch-bg" id="chBg"><div class="ch" role="dialog" aria-labelledby="chT">
+  <img src="/assets/site/icon.png" alt="">
+  <h3 id="chT">How would you like to continue?</h3>
+  <p>Use the Android app for the best experience, or continue right here in your browser.</p>
+  <a class="ap" id="chApp" href="<?= h($s['play']) ?>">📱 Open Android app</a>
+  <a class="wb" id="chWeb" href="/app/">🌐 Continue in browser</a>
+  <button class="x" id="chX">Just view the website</button>
+</div></div>
+<script>
+(function () {
+  var bg = document.getElementById('chBg');
+  function get() { try { return localStorage.getItem('eh_choice'); } catch (e) { return null; } }
+  function set(v) { try { localStorage.setItem('eh_choice', v); } catch (e) {} }
+  if (/android/i.test(navigator.userAgent)) {   // on Android, open the installed app (or the Play Store if not installed)
+    document.getElementById('chApp').href = 'intent://details?id=in.electricalhub.app#Intent;scheme=market;package=com.android.vending;S.browser_fallback_url=' + encodeURIComponent('<?= h($s['play']) ?>') + ';end';
+  }
+  // returning visitors who chose the browser go straight to the web app (add ?site to see the website)
+  if (get() === 'web' && !/[?&]site/.test(location.search)) { location.replace('/app/'); return; }
+  if (!get()) setTimeout(function () { bg.classList.add('show'); }, 600);
+  document.getElementById('chApp').onclick = function () { set('app'); bg.classList.remove('show'); };
+  document.getElementById('chWeb').onclick = function () { set('web'); };
+  document.getElementById('chX').onclick = function () { set('site'); bg.classList.remove('show'); };
+  bg.onclick = function (e) { if (e.target === bg) bg.classList.remove('show'); };
+})();
+</script>
 <?php site_foot();
