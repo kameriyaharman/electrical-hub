@@ -8,3 +8,4 @@ android/local.properties
 *.iml
 .idea/
 backend/config.local.php
+backend/_backup/

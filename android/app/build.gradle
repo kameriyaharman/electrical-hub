@@ -2,7 +2,7 @@ plugins {
     id 'com.android.application'
 }
 
-def apiBase = project.findProperty('apiBase') ?: 'https://electrical-hub-production.up.railway.app/api/'
+def apiBase = project.findProperty('apiBase') ?: 'https://electricalmarkethub.in/api/'
 def webSrc = file("${rootDir}/../backend/app")
 def webOut = layout.buildDirectory.dir("webassets")
 
@@ -14,8 +14,8 @@ android {
         applicationId "in.electricalhub.app"
         minSdk 24
         targetSdk 36
-        versionCode 12
-        versionName "1.12"
+        versionCode 13
+        versionName "1.13"
         buildConfigField "String", "API_BASE", "\"${apiBase}\""
     }
 
