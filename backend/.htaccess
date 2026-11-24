@@ -5,7 +5,7 @@ RewriteEngine On
 # Always use https (skip when behind a proxy that already terminated TLS)
 RewriteCond %{HTTPS} off
 RewriteCond %{HTTP:X-Forwarded-Proto} !https
-RewriteCond %{HTTP_HOST} !^(localhost|127\.0\.0\.1)
+RewriteCond %{HTTP_HOST} ^(www\.)?electricalmarkethub\.in$ [NC]
 RewriteRule ^ https://%{HTTP_HOST}%{REQUEST_URI} [R=301,L]
 RewriteRule ^(lib|install)/ - [F,L]
 RewriteRule ^config(\.local)?\.php$ - [F,L]
