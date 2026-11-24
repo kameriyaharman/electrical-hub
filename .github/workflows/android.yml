@@ -35,14 +35,14 @@ jobs:
           API="${{ vars.API_BASE }}"
           if [ -z "$API" ]; then API=$(grep '^apiBase=' gradle.properties | cut -d= -f2-); fi
           echo "API base: $API"
-          TASKS="assembleRelease"
+          TASKS="assembleRelease bundleRelease"
           if [ -n "$EH_KEYSTORE_B64" ]; then
             echo "$EH_KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/upload.jks"
             export EH_KEYSTORE="$RUNNER_TEMP/upload.jks"
             TASKS="assembleRelease bundleRelease"
             echo "Signing with the Play upload key"
           else
-            echo "No upload key secret — APK signed with the dev test key, no AAB"
+            echo "No upload key secret — APK and AAB signed with the dev test key (re-sign the AAB with the upload key before Play upload)"
           fi
           set -o pipefail
           gradle $TASKS -PapiBase="$API" --no-daemon --stacktrace 2>&1 | tee ../build.log
