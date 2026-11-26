@@ -44,7 +44,7 @@ function geo_get($url) {
 }
 function clean_city($c) {
     $c = trim(preg_replace('/\s+/', ' ', (string)$c));
-    $c = preg_replace('/\s+(Municipal Corporation|Municipal Council|Municipality|Nagar Nigam|Nagar Palika( Parishad)?|Mahanagar Palika|Cantonment( Board)?|Metropolitan( Region| Area)?|Urban|Rural|District|Tehsil|Taluka?|Mandal|Division|City)$/i', '', $c);
+    $c = preg_replace('/\s+(Municipal Corporation|Municipal Council|Municipality|Nagar Nigam|Nagar Palika( Parishad)?|Mahanagar Palika|Cantonment( Board)?|Metropolitan( Region| Area)?|Urban|Rural|District|Tehsil|Tahsil|Taluka?|Taluk|Mandal|Division|City)$/i', '', $c);
     return trim($c);
 }
 function place_out($name, $street, $area, $city, $state, $pin, $lat, $lng) {
@@ -61,6 +61,7 @@ function photon_place($f) {
     if (!$c || (($p['countrycode'] ?? 'IN') !== 'IN')) return null;
     $type = $p['type'] ?? ''; $isCity = in_array($type, ['city', 'town', 'village']) || in_array($p['osm_value'] ?? '', ['city', 'town', 'village']);
     $city = $p['city'] ?? ($isCity ? ($p['name'] ?? '') : ($p['county'] ?? ($p['district'] ?? '')));
+    if (!clean_city($city)) $city = $p['county'] ?? ($p['name'] ?? '');   // a district / tehsil record → its own name
     $area = $p['district'] ?? ($p['locality'] ?? '');
     $street = trim(($p['housenumber'] ?? '') . ' ' . ($p['street'] ?? ''));
     return place_out($p['name'] ?? '', $street, $area, $city, $p['state'] ?? '', $p['postcode'] ?? '', $c[1], $c[0]);
