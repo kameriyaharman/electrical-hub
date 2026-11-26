@@ -290,10 +290,10 @@ try {
             + ($lat ? ['lat' => round((float)$lat, 2), 'lon' => round((float)$lng, 2)] : []));
         $js = geo_get($url);
         $places = [];
-        foreach (($js['features'] ?? []) as $f) { $pl = photon_place($f); if ($pl) $places[strtolower($pl['label'] . '|' . $pl['sub'])] ??= $pl; }
+        foreach (($js['features'] ?? []) as $f) { $pl = photon_place($f); if ($pl) $places[strtolower($pl['label'] . '|' . $pl['city'] . '|' . $pl['state'])] ??= $pl; }
         if (!$places) {   // fallback: Nominatim
             $js = geo_get('https://nominatim.openstreetmap.org/search?' . http_build_query(['q' => $qq, 'format' => 'jsonv2', 'addressdetails' => 1, 'limit' => 8, 'countrycodes' => 'in']));
-            foreach ((array)$js as $r) { $pl = nominatim_place($r); if ($pl) $places[strtolower($pl['label'] . '|' . $pl['sub'])] ??= $pl; }
+            foreach ((array)$js as $r) { $pl = nominatim_place($r); if ($pl) $places[strtolower($pl['label'] . '|' . $pl['city'] . '|' . $pl['state'])] ??= $pl; }
         }
         out(['ok' => true, 'places' => array_values($places)]);
 
