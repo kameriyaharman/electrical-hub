@@ -50,6 +50,11 @@ function migrate($pdo) {
     ];
     // App renamed: Electrical Hub -> Electrical Market Hub
     $pdo->exec("UPDATE settings SET v = 'Electrical Market Hub' WHERE k = 'app_name' AND v = 'Electrical Hub'");
+    // cities saved with a location in another state (from earlier picks) → their real centre
+    foreach ([['Jaipur', 26.9124, 75.7873], ['Ahmedabad', 23.0225, 72.5714], ['Gunturu', 16.3067, 80.4365], ['Guntur', 16.3067, 80.4365]] as [$cn, $la, $lo]) {
+        $st = $pdo->prepare("UPDATE cities SET lat = ?, lng = ? WHERE LOWER(name) = LOWER(?) AND (lat IS NULL OR ABS(lat - ?) > 1.5 OR ABS(lng - ?) > 1.5)");
+        $st->execute([$la, $lo, $cn, $la, $lo]);
+    }
     // client's support contacts (replace the old placeholder values once; later edits in admin are kept)
     $pdo->exec("UPDATE settings SET v = 'electricmarkethub@gmail.com' WHERE k = 'support_email' AND v = 'support@electricalhub.in'");
     $pdo->exec("UPDATE settings SET v = '9043561113' WHERE k IN ('support_phone', 'support_whatsapp') AND v = '9220892667'");

@@ -42,8 +42,13 @@ function geo_get($url) {
     if (is_array($js)) @file_put_contents($f, $raw);
     return $js;
 }
+function clean_city($c) {
+    $c = trim(preg_replace('/\s+/', ' ', (string)$c));
+    $c = preg_replace('/\s+(Municipal Corporation|Municipal Council|Municipality|Nagar Nigam|Nagar Palika( Parishad)?|Mahanagar Palika|Cantonment( Board)?|Metropolitan( Region| Area)?|Urban|Rural|District|Tehsil|Taluka?|Mandal|Division|City)$/i', '', $c);
+    return trim($c);
+}
 function place_out($name, $street, $area, $city, $state, $pin, $lat, $lng) {
-    $city = trim((string)$city); $state = trim((string)$state);
+    $city = clean_city($city); $state = trim((string)$state);
     $area = trim((string)$area); $name = trim((string)$name);
     $label = $name ?: ($area ?: $city);
     if (!$label) return null;
@@ -285,10 +290,10 @@ try {
             + ($lat ? ['lat' => round((float)$lat, 2), 'lon' => round((float)$lng, 2)] : []));
         $js = geo_get($url);
         $places = [];
-        foreach (($js['features'] ?? []) as $f) { $pl = photon_place($f); if ($pl) $places[$pl['label']] = $pl; }
+        foreach (($js['features'] ?? []) as $f) { $pl = photon_place($f); if ($pl) $places[strtolower($pl['label'] . '|' . $pl['sub'])] ??= $pl; }
         if (!$places) {   // fallback: Nominatim
             $js = geo_get('https://nominatim.openstreetmap.org/search?' . http_build_query(['q' => $qq, 'format' => 'jsonv2', 'addressdetails' => 1, 'limit' => 8, 'countrycodes' => 'in']));
-            foreach ((array)$js as $r) { $pl = nominatim_place($r); if ($pl) $places[$pl['label']] = $pl; }
+            foreach ((array)$js as $r) { $pl = nominatim_place($r); if ($pl) $places[strtolower($pl['label'] . '|' . $pl['sub'])] ??= $pl; }
         }
         out(['ok' => true, 'places' => array_values($places)]);
 
@@ -306,12 +311,14 @@ try {
         out(['ok' => true, 'place' => $pl]);
 
     case 'geo/city':   // find or create a city so any place in India can be used
-        $name = trim(preg_replace('/\s+/', ' ', (string)in('name')));
+        $name = clean_city(in('name'));
         $state = trim((string)in('state'));
         if (mb_strlen($name) < 2 || mb_strlen($name) > 100) fail('Enter a valid city');
         $c = one("SELECT id, name, state, lat, lng FROM cities WHERE LOWER(name) = LOWER(?) AND (? = '' OR state = '' OR LOWER(state) = LOWER(?)) ORDER BY active DESC, id LIMIT 1", [$name, $state, $state]);
         if ($c) {
-            if ($c['lat'] === null && in('lat')) q("UPDATE cities SET lat = ?, lng = ? WHERE id = ?", [(float)in('lat'), (float)in('lng'), $c['id']]);
+            // no location yet, or the saved one is clearly wrong (over 150 km from a real place in this city) → use the real one
+            if (in('lat') && ($c['lat'] === null || haversine_m((float)$c['lat'], (float)$c['lng'], (float)in('lat'), (float)in('lng')) > 150000))
+                q("UPDATE cities SET lat = ?, lng = ? WHERE id = ?", [(float)in('lat'), (float)in('lng'), $c['id']]);
             if ($state && $c['state'] === '') q("UPDATE cities SET state = ? WHERE id = ?", [$state, $c['id']]);
         } else {
             q("INSERT INTO cities (name, state, lat, lng, active) VALUES (?, ?, ?, ?, 1)", [$name, $state, in('lat') ? (float)in('lat') : null, in('lng') ? (float)in('lng') : null]);
